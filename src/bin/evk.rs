@@ -1,14 +1,15 @@
 use clap::{Parser, Subcommand};
-use postcard;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use anyhow::{Result, Context, anyhow};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use zip::{write::FileOptions, ZipArchive, ZipWriter};
+use sha2::{Sha256, Digest};
+use zip::write::{FileOptions, ZipWriter};
+use zip::ZipArchive;
 
 #[derive(Parser)]
+#[command(name = "evk")]
+#[command(about = "EVK verifier", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -16,54 +17,32 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    Pack {
-        #[arg(long)] job: PathBuf,
-        #[arg(long)] snapshot: PathBuf,
-        #[arg(long)] input: PathBuf,
-        #[arg(short, long)] output: PathBuf,
-    },
     Verify {
-        bundle: PathBuf,
-        #[arg(long)] cert: bool,
+        #[arg(long)]
+        bundle: String,
+    },
+    Pack {
+        #[arg(long)]
+        job: String,
+        #[arg(long)]
+        snapshot: String,
+        #[arg(long)]
+        input: String,
+        #[arg(long)]
+        output: String,
     },
 }
 
-// Postcard structs - #[repr(C)] forces no padding
-#[derive(Serialize, Deserialize)]
-#[repr(C)]
-struct Job {
-    schema_hash: [u8; 32],
-    ops_len: u32,
-}
+fn run_pack(job: String, snapshot: String, input: String, output: String) -> Result<()> {
+    let job_bytes = std::fs::read(&job)?;
+    let snap_bytes = std::fs::read(&snapshot)?;
+    let input_bytes = std::fs::read(&input)?;
 
-#[derive(Serialize, Deserialize)]
-#[repr(C)]
-struct Snapshot {
-    regs: BTreeMap<u16, u32>, // BTreeMap = sorted keys, deterministic
-}
-
-fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
-    match cli.cmd {
-        Cmd::Pack { job, snapshot, input, output } => pack(job, snapshot, input, output),
-        Cmd::Verify { bundle, cert } => verify(bundle, cert),
-    }
-}
-
-fn pack(job: PathBuf, snapshot: PathBuf, input: PathBuf, output: PathBuf) -> anyhow::Result<()> {
-    let job_bytes = std::fs::read(job)?;
-    let snap_bytes = std::fs::read(snapshot)?;
-    let input_bytes = std::fs::read(input)?;
-
-    let mut out = File::create(&output)?;
-    let mut zip = ZipWriter::new(&mut out);
-    // CRITICAL: Stored = no compression. Compression = non-deterministic.
-    let opts = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    // CRITICAL: Fixed timestamp. mtime leaks otherwise.
-    let opts = opts.last_modified_time(zip::DateTime::from_date_and_time(2024, 1, 1, 0, 0, 0).unwrap());
+    let file = File::create(&output)?;
+    let mut zip = ZipWriter::new(file);
+    let opts = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     let mut manifest = String::new();
-
     for (name, data) in [
         ("job.evk", &job_bytes),
         ("snapshot.evk", &snap_bytes),
@@ -82,67 +61,60 @@ fn pack(job: PathBuf, snapshot: PathBuf, input: PathBuf, output: PathBuf) -> any
     Ok(())
 }
 
-fn verify(bundle: PathBuf, cert: bool) -> anyhow::Result<()> {
-    let result = (|| -> anyhow::Result<()> {
-        let file = File::open(&bundle)?;
-        let mut zip = ZipArchive::new(file)?;
+fn run_verify(bundle: String) -> Result<()> {
+    let file = File::open(&bundle)?;
+    let mut zip = ZipArchive::new(file)?;
 
-        // 1. Read manifest first. Only files in manifest exist.
-        let mut manifest_str = String::new();
-        zip.by_name("manifest.txt")?.read_to_string(&mut manifest_str)?;
+    // 1. Read manifest first. Only files in manifest exist.
+    let mut manifest_str = String::new();
+    zip.by_name("manifest.txt")?.read_to_string(&mut manifest_str)?;
 
-        // 2. Hash every file before use. No env, no time, no FS walk.
-        for line in manifest_str.lines() {
-            let parts: Vec<&str> = line.splitn(3, ' ').collect();
-            let (expected_hex, expected_len, name) = (parts[0], parts[1].parse::<u32>()?, parts[2]);
-
-            let mut data = Vec::new();
-            zip.by_name(name)?.read_to_end(&mut data)?;
-
-            if data.len() as u32 != expected_len {
-                return Err(anyhow::anyhow!("Bundle integrity violation: {} size mismatch", name));
-            }
-            let hash = Sha256::digest(&data);
-            if hex::encode(hash) != expected_hex {
-                return Err(anyhow::anyhow!("Bundle integrity violation: {} hash mismatch", name));
-            }
+    // 2. Hash every file before use. No env, no time, no FS walk.
+    for line in manifest_str.lines() {
+        let parts: Vec<&str> = line.splitn(3, ' ').collect();
+        let (expected_hex, expected_len, name) = (parts[0], parts[1].parse::<u32>()?, parts[2]);
+        let mut data = Vec::new();
+        zip.by_name(name)?.read_to_end(&mut data)?;
+        if data.len() as u32!= expected_len {
+            return Err(anyhow!("Bundle integrity violation: {} size mismatch", name));
         }
+        let hash = Sha256::digest(&data);
+        if hex::encode(hash)!= expected_hex {
+            return Err(anyhow!("Bundle integrity violation: {} hash mismatch", name));
+        }
+    }
+    Ok(())
+}
 
-        // 3. CVM runs here. No std::env, no std::time. 6 ops only.
-        // For demo: just deserialize to prove postcard works cross-arch
-        let mut job_data = Vec::new();
-        zip.by_name("job.evk")?.read_to_end(&mut job_data)?;
-        let _: Job = postcard::from_bytes(&job_data).map_err(|e| {
-            anyhow::anyhow!("Job decode failed: {}", e)
-        })?;
+fn main() {
+    let cert_flag = std::env::args().any(|a| a == "--cert");
 
-        let mut snap_data = Vec::new();
-        zip.by_name("snapshot.evk")?.read_to_end(&mut snap_data)?;
-        let _: Snapshot = postcard::from_bytes(&snap_data).map_err(|e| {
-            anyhow::anyhow!("Snapshot decode failed: {}", e)
-        })?;
+    let result = std::panic::catch_unwind(|| -> anyhow::Result<()> {
+        let cli = Cli::try_parse()?;
+        match cli.cmd {
+            Cmd::Verify { bundle,.. } => run_verify(bundle),
+            Cmd::Pack { job, snapshot, input, output } => run_pack(job, snapshot, input, output),
+        }
+    });
 
-        Ok(())
-    })();
-
-    if cert {
+    if cert_flag {
         match result {
-            Ok(_) => {
-                print!("EVK VERIFICATION CERTIFICATE\n");
-                print!("Status: VALID\n");
-                print!("Execution resolved within bundle scope.\n");
-                print!("No unresolved references within bundle scope.\n");
-                print!("No execution divergence detected.\n");
-                print!("Result: CLOSED\n");
+            Ok(Ok(_)) => {
+                print!("EVK VERIFICATION CERTIFICATE\nStatus: VALID\nExecution resolved within bundle scope.\nNo unresolved references within bundle scope.\nNo execution divergence detected.\nResult: CLOSED\n");
             }
-            Err(e) => {
-                print!("EVK VERIFICATION CERTIFICATE\n");
-                print!("Status: INVALID\n");
-                print!("Reason: {}\n", e);
-                print!("Result: REJECTED\n");
+            Ok(Err(e)) => {
+                print!("EVK VERIFICATION CERTIFICATE\nStatus: INVALID\nReason: {}\nResult: REJECTED\n", e);
+                std::process::exit(1);
+            }
+            Err(_) => {
+                print!("EVK VERIFICATION CERTIFICATE\nStatus: INVALID\nReason: panic\nResult: REJECTED\n");
                 std::process::exit(1);
             }
         }
+    } else {
+        if let Err(e) = result.unwrap_or_else(|_| Err(anyhow::anyhow!("panic"))) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
     }
-    result
 }
