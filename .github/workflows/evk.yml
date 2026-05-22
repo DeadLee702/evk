@@ -21,16 +21,18 @@ jobs:
         run: shasum -a 256 ${{ matrix.os }}.evkp > ${{ matrix.os }}.sha256
 
       - name: Verify MUST be VALID
-        run: ./target/release/evk verify ${{ matrix.os }}.evkp --cert | tee cert.txt
+        run: |
+          set -o pipefail
+          ./target/release/evk verify ${{ matrix.os }}.evkp --cert 2>&1 | tee cert.txt
 
       - name: DEBUG - Show both certs as hex
         if: always()
         run: |
-          echo "=== EXPECTED ==="
+          echo "=== EXPECTED =="
           hexdump -C tests/expected_cert.txt
-          echo "=== ACTUAL ==="
+          echo "=== ACTUAL =="
           hexdump -C cert.txt
-          echo "=== BYTE DIFF ==="
+          echo "=== BYTE DIFF =="
           cmp -l tests/expected_cert.txt cert.txt || true
 
       - name: Cert must match exactly

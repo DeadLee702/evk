@@ -83,56 +83,66 @@ fn pack(job: PathBuf, snapshot: PathBuf, input: PathBuf, output: PathBuf) -> any
 }
 
 fn verify(bundle: PathBuf, cert: bool) -> anyhow::Result<()> {
-    let file = File::open(&bundle)?;
-    let mut zip = ZipArchive::new(file)?;
+    let result = (|| -> anyhow::Result<()> {
+        let file = File::open(&bundle)?;
+        let mut zip = ZipArchive::new(file)?;
 
-    // 1. Read manifest first. Only files in manifest exist.
-    let mut manifest_str = String::new();
-    zip.by_name("manifest.txt")?.read_to_string(&mut manifest_str)?;
+        // 1. Read manifest first. Only files in manifest exist.
+        let mut manifest_str = String::new();
+        zip.by_name("manifest.txt")?.read_to_string(&mut manifest_str)?;
 
-    // 2. Hash every file before use. No env, no time, no FS walk.
-    for line in manifest_str.lines() {
-        let parts: Vec<&str> = line.splitn(3, ' ').collect();
-        let (expected_hex, expected_len, name) = (parts[0], parts[1].parse::<u32>()?, parts[2]);
+        // 2. Hash every file before use. No env, no time, no FS walk.
+        for line in manifest_str.lines() {
+            let parts: Vec<&str> = line.splitn(3, ' ').collect();
+            let (expected_hex, expected_len, name) = (parts[0], parts[1].parse::<u32>()?, parts[2]);
 
-        let mut data = Vec::new();
-        zip.by_name(name)?.read_to_end(&mut data)?;
+            let mut data = Vec::new();
+            zip.by_name(name)?.read_to_end(&mut data)?;
 
-        if data.len() as u32 != expected_len {
-            return print_invalid("Bundle integrity violation", name);
+            if data.len() as u32 != expected_len {
+                return Err(anyhow::anyhow!("Bundle integrity violation: {} size mismatch", name));
+            }
+            let hash = Sha256::digest(&data);
+            if hex::encode(hash) != expected_hex {
+                return Err(anyhow::anyhow!("Bundle integrity violation: {} hash mismatch", name));
+            }
         }
-        let hash = Sha256::digest(&data);
-        if hex::encode(hash) != expected_hex {
-            return print_invalid("Bundle integrity violation", name);
-        }
-    }
 
-    // 3. CVM runs here. No std::env, no std::time. 6 ops only.
-    // For demo: just deserialize to prove postcard works cross-arch
-    let mut job_data = Vec::new();
-    zip.by_name("job.evk")?.read_to_end(&mut job_data)?;
-    let _: Job = postcard::from_bytes(&job_data)?;
+        // 3. CVM runs here. No std::env, no std::time. 6 ops only.
+        // For demo: just deserialize to prove postcard works cross-arch
+        let mut job_data = Vec::new();
+        zip.by_name("job.evk")?.read_to_end(&mut job_data)?;
+        let _: Job = postcard::from_bytes(&job_data).map_err(|e| {
+            anyhow::anyhow!("Job decode failed: {}", e)
+        })?;
 
-    let mut snap_data = Vec::new();
-    zip.by_name("snapshot.evk")?.read_to_end(&mut snap_data)?;
-    let _: Snapshot = postcard::from_bytes(&snap_data)?;
+        let mut snap_data = Vec::new();
+        zip.by_name("snapshot.evk")?.read_to_end(&mut snap_data)?;
+        let _: Snapshot = postcard::from_bytes(&snap_data).map_err(|e| {
+            anyhow::anyhow!("Snapshot decode failed: {}", e)
+        })?;
+
+        Ok(())
+    })();
 
     if cert {
-        print!("EVK VERIFICATION CERTIFICATE\n");
-        print!("Status: VALID\n");
-        print!("Execution resolved within bundle scope.\n");
-        print!("No unresolved references within bundle scope.\n");
-        print!("No execution divergence detected.\n");
-        print!("Result: CLOSED\n");
+        match result {
+            Ok(_) => {
+                print!("EVK VERIFICATION CERTIFICATE\n");
+                print!("Status: VALID\n");
+                print!("Execution resolved within bundle scope.\n");
+                print!("No unresolved references within bundle scope.\n");
+                print!("No execution divergence detected.\n");
+                print!("Result: CLOSED\n");
+            }
+            Err(e) => {
+                print!("EVK VERIFICATION CERTIFICATE\n");
+                print!("Status: INVALID\n");
+                print!("Reason: {}\n", e);
+                print!("Result: REJECTED\n");
+                std::process::exit(1);
+            }
+        }
     }
-    Ok(())
-}
-
-fn print_invalid(reason: &str, file: &str) -> anyhow::Result<()> {
-    print!("EVK VERIFICATION CERTIFICATE\n");
-    print!("Status: INVALID\n");
-    print!("Reason: {}\n", reason);
-    print!("File: {}\n", file);
-    print!("Result: REJECTED\n");
-    std::process::exit(1);
+    result
 }
