@@ -23,10 +23,18 @@ jobs:
       - name: Verify MUST be VALID
         run: ./target/release/evk verify ${{ matrix.os }}.evkp --cert | tee cert.txt
 
-      - name: Cert must match exactly
+      - name: DEBUG - Show both certs as hex
+        if: always()
         run: |
-          ./target/release/evk verify ${{ matrix.os }}.evkp --cert > cert.txt
-          cmp -s cert.txt tests/expected_cert.txt || (echo "Cert mismatch:" && cmp -l cert.txt tests/expected_cert.txt && exit 1)
+          echo "=== EXPECTED ==="
+          hexdump -C tests/expected_cert.txt
+          echo "=== ACTUAL ==="
+          hexdump -C cert.txt
+          echo "=== BYTE DIFF ==="
+          cmp -l tests/expected_cert.txt cert.txt || true
+
+      - name: Cert must match exactly
+        run: cmp -s cert.txt tests/expected_cert.txt
 
       - name: Flip 1 byte, MUST be INVALID
         run: |
