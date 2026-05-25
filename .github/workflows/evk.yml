@@ -15,7 +15,7 @@ jobs:
         run: cargo build --release
 
       - name: Pack bundle
-        run: ./target/release/evk pack --job tests/job.evk --snapshot tests/snapshot.evk --input tests/input.bin -o ${{ matrix.os }}.evkp
+        run: ./target/release/evk pack --job tests/job.evk --snapshot tests/snapshot.evk --input tests/input.bin --output ${{ matrix.os }}.evkp
 
       - name: SHA256 of bundle
         run: shasum -a 256 ${{ matrix.os }}.evkp > ${{ matrix.os }}.sha256
@@ -29,11 +29,15 @@ jobs:
         if: always()
         run: |
           echo "=== EXPECTED =="
-          hexdump -C tests/expected_cert.txt
+          if [ -f tests/expected_cert.txt ]; then hexdump -C tests/expected_cert.txt; else echo "expected_cert.txt missing"; fi
           echo "=== ACTUAL =="
-          hexdump -C cert.txt
+          if [ -f cert.txt ]; then hexdump -C cert.txt; else echo "cert.txt missing"; fi
           echo "=== BYTE DIFF =="
-          cmp -l tests/expected_cert.txt cert.txt || true
+          if [ -f tests/expected_cert.txt ] && [ -f cert.txt ]; then
+            cmp -l tests/expected_cert.txt cert.txt || true
+          else
+            echo "Skipping diff, files missing"
+          fi
 
       - name: Cert must match exactly
         run: cmp -s cert.txt tests/expected_cert.txt
