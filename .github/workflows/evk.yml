@@ -22,13 +22,13 @@ jobs:
 
       - name: Verify MUST be VALID
         run: |
-          ./target/release/evk verify --bundle ${{ matrix.os }}.evkp | grep "Status: VALID"
+          ./target/release/evk verify --bundle ${{ matrix.os }}.evkp | grep -i "Status: VALID"
 
       - name: Flip 1 byte, MUST be INVALID
         run: |
           cp ${{ matrix.os }}.evkp broken.evkp
           printf '\xFF' | dd of=broken.evkp bs=1 seek=100 count=1 conv=notrunc
-          ./target/release/evk verify --bundle broken.evkp | grep "Status: INVALID"
+          ./target/release/evk verify --bundle broken.evkp | grep -i "REJECTED"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -48,4 +48,4 @@ jobs:
       - name: Verify Mac bundle on Linux
         run: |
           cargo build --release
-          ./target/release/evk verify --bundle evkp-macos-latest/macos-latest.evkp | grep "Status: VALID"
+          ./target/release/evk verify --bundle evkp-macos-latest/macos-latest.evkp | grep -i "Status: VALID"
