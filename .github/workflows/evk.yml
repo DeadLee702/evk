@@ -39,8 +39,10 @@ jobs:
             echo "Skipping diff, files missing"
           fi
 
-      - name: Cert must match exactly
-        run: cmp -s cert.txt tests/expected_cert.txt
+      - name: Check cert lines
+        run: |
+          echo "Comparing generated certificate text..."
+          diff -u tests/expected_cert.txt cert.txt
 
       - name: Flip 1 byte, MUST be INVALID
         run: |
