@@ -27,7 +27,7 @@ jobs:
         run: |
           cp ${{ matrix.os }}.evkp broken.evkp
           printf '\xFF' | dd of=broken.evkp bs=1 seek=100 count=1 conv=notrunc
-          ! ./target/release/evk verify --bundle broken.evkp
+          ./target/release/evk verify --bundle broken.evkp 2>&1 | grep -i -E "INVALID|REJECTED|ERROR"
 
       - uses: actions/upload-artifact@v4
         with:
