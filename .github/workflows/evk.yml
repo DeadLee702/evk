@@ -23,7 +23,7 @@ jobs:
       - name: Verify MUST be VALID
         run: |
           set -o pipefail
-          ./target/release/evk verify ${{ matrix.os }}.evkp --cert 2>&1 | tee cert.txt
+          ./target/release/evk verify --bundle ${{ matrix.os }}.evkp --cert 2>&1 | tee cert.txt
 
       - name: DEBUG - Show both certs as hex
         if: always()
@@ -46,7 +46,7 @@ jobs:
         run: |
           cp ${{ matrix.os }}.evkp broken.evkp
           printf '\xFF' | dd of=broken.evkp bs=1 seek=100 count=1 conv=notrunc
-          ./target/release/evk verify broken.evkp --cert | grep "Status: INVALID"
+          ./target/release/evk verify --bundle broken.evkp --cert | grep "Status: INVALID"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -66,4 +66,4 @@ jobs:
       - name: Verify Mac bundle on Linux
         run: |
           cargo build --release
-          ./target/release/evk verify evkp-macos-latest/macos-latest.evkp --cert | grep "Status: VALID" 
+          ./target/release/evk verify --bundle evkp-macos-latest/macos-latest.evkp --cert | grep "Status: VALID"
