@@ -21,14 +21,13 @@ jobs:
         run: shasum -a 256 ${{ matrix.os }}.evkp > ${{ matrix.os }}.sha256
 
       - name: Verify MUST be VALID
-        run: |
-          ./target/release/evk verify --bundle ${{ matrix.os }}.evkp 2>&1 | grep -i "VALID"
+        run: ./target/release/evk verify --bundle ${{ matrix.os }}.evkp
 
       - name: Flip 1 byte, MUST be INVALID
         run: |
           cp ${{ matrix.os }}.evkp broken.evkp
           printf '\xFF' | dd of=broken.evkp bs=1 seek=100 count=1 conv=notrunc
-          ./target/release/evk verify --bundle broken.evkp 2>&1 | grep -i "INVALID"
+          ! ./target/release/evk verify --bundle broken.evkp
 
       - uses: actions/upload-artifact@v4
         with:
@@ -46,6 +45,4 @@ jobs:
       - name: Byte-identical across arch
         run: diff evkp-ubuntu-latest/ubuntu-latest.evkp evkp-macos-latest/macos-latest.evkp
       - name: Verify Mac bundle on Linux
-        run: |
-          cargo build --release
-          ./target/release/evk verify --bundle evkp-macos-latest/macos-latest.evkp 2>&1 | grep -i "VALID"
+        run: ./target/release/evk verify --bundle evkp-macos-latest/macos-latest.evkp
