@@ -66,4 +66,4 @@ jobs:
       - name: Verify Mac bundle on Linux
         run: |
           cargo build --release
-          ./target/release/evk verify evkp-macos-latest/macos-latest.evkp --cert | grep "Status: VALID"
+          ./target/release/evk verify evkp-macos-latest/macos-latest.evkp --cert | grep "Status: VALID" 
