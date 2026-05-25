@@ -45,4 +45,4 @@ jobs:
       - name: Byte-identical across arch
         run: diff evkp-ubuntu-latest/ubuntu-latest.evkp evkp-macos-latest/macos-latest.evkp
       - name: Verify Mac bundle on Linux
-        run: ./target/release/evk verify --bundle evkp-macos-latest/macos-latest.evkp
+        run: ./target/release/evk verify --bundle evkp-macos-latest/macos-latest.evkp 
