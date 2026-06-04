@@ -17,7 +17,12 @@ jobs:
         run: cargo build --release
 
       - name: Pack bundle
-        run: ./target/release/evk pack --json   # ← change flags if needed
+        run: |
+          ./target/release/evk pack \
+            --job canonical \
+            --snapshot ${{ matrix.os }} \
+            --input . \
+            --output ${{ matrix.os }}.evkp
 
       - name: SHA256 of bundle
         run: shasum -a 256 ${{ matrix.os }}.evkp
@@ -50,3 +55,4 @@ jobs:
           fi
           echo "=== ACTUAL CERT ==="
           cat cert.txt || echo "No cert.txt generated"
+          
