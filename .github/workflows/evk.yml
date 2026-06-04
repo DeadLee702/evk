@@ -17,7 +17,7 @@ jobs:
         run: cargo build --release
 
       - name: Pack bundle
-        run: ./target/release/evk pack --json   # adjust flags if your pack command needs different args
+        run: ./target/release/evk pack --json   # ← change flags if needed
 
       - name: SHA256 of bundle
         run: shasum -a 256 ${{ matrix.os }}.evkp
