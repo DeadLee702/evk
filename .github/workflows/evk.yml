@@ -14,20 +14,34 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Debug - Verify Binary Existence
+      - name: Debug - List target contents
         run: |
-          echo "Current directory: $(pwd)"
-          echo "Target directory contents:"
-          ls -laF ./target/release/ | head -20
-          if [ -f "./target/release/evk" ]; then
-            echo "✓ Binary found!"
-            file ./target/release/evk
+          echo "=== DIAGNOSTIC: Build Output Analysis ==="
+          echo "Current working directory:"
+          pwd
+          echo ""
+          echo "Repository structure:"
+          ls -laF
+          echo ""
+          echo "Checking if target directory exists:"
+          if [ -d "target" ]; then
+            echo "✓ target/ directory EXISTS"
+            echo ""
+            echo "Listing target/ structure:"
+            ls -laF target/ | head -20
+            echo ""
+            echo "Listing target/release/ contents:"
+            ls -laF target/release/ 2>/dev/null || echo "✗ target/release/ does NOT exist"
+            echo ""
+            echo "Searching for 'evk' binary anywhere in target/:"
+            find target -name "evk" -type f 2>/dev/null || echo "✗ No 'evk' binary found in target/"
           else
-            echo "✗ Binary missing!"
-            echo "Checking for any 'evk' files in target:"
-            find ./target -name "evk" -type f 2>/dev/null || echo "No evk binary found"
-            exit 1
+            echo "✗ target/ directory DOES NOT exist - Build likely failed silently!"
           fi
+          echo ""
+          echo "Cargo version and toolchain:"
+          cargo --version
+          rustc --version
 
       - name: Pack bundle
         run: ./target/release/evk pack --job tests/job.evk --snapshot tests/snapshot.evk --input tests/input.bin --output ${{ matrix.os }}.evkp
@@ -60,15 +74,19 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Debug - Verify Binary Existence
+      - name: Debug - List target contents
         run: |
-          echo "Current directory: $(pwd)"
-          if [ -f "./target/release/evk" ]; then
-            echo "✓ Binary found!"
-            file ./target/release/evk
+          echo "=== DIAGNOSTIC: Build Output Analysis ==="
+          echo "Checking if target directory exists:"
+          if [ -d "target" ]; then
+            echo "✓ target/ directory EXISTS"
+            echo "Listing target/release/ contents:"
+            ls -laF target/release/ 2>/dev/null || echo "✗ target/release/ does NOT exist"
+            echo ""
+            echo "Searching for 'evk' binary:"
+            find target -name "evk" -type f 2>/dev/null || echo "✗ No 'evk' binary found"
           else
-            echo "✗ Binary missing!"
-            exit 1
+            echo "✗ target/ directory DOES NOT exist"
           fi
 
       - uses: actions/download-artifact@v4
