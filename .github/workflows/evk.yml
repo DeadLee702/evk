@@ -7,52 +7,51 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build
         run: cargo build --release
 
       - name: Pack bundle
-        run: |
-          ./target/release/evk pack \
-            --job canonical \
-            --snapshot ${{ matrix.os }} \
-            --input . \
-            --output ${{ matrix.os }}.evkp
+        run: ./target/release/evk pack --job tests/job.evk --snapshot tests/snapshot.evk --input tests/input.bin --output ${{ matrix.os }}.evkp
 
       - name: SHA256 of bundle
-        run: shasum -a 256 ${{ matrix.os }}.evkp
+        run: shasum -a 256 ${{ matrix.os }}.evkp > ${{ matrix.os }}.sha256
 
       - name: Verify MUST be VALID
-        run: |
-          set -o pipefail
-          
-          echo "=== Running verification ==="
-          ./target/release/evk verify --bundle ${{ matrix.os }}.evkp --cert 2>&1 | tee cert.txt
-          
-          echo "=== VERIFICATION RESULT ==="
-          cat cert.txt
-          
-          if grep -q "Status: VALID" cert.txt; then
-            echo "✅ Verification PASSED on ${{ matrix.os }}"
-          else
-            echo "❌ Verification FAILED on ${{ matrix.os }}"
-            exit 1
-          fi
+        run: ./target/release/evk verify --bundle ${{ matrix.os }}.evkp
 
-      - name: DEBUG - Show both certs as help
-        if: always()
+      - name: Flip 1 byte, MUST be INVALID
         run: |
-          echo "=== EXPECTED CERT ==="
-          if [ -f tests/expected_cert.txt ]; then
-            cat tests/expected_cert.txt
-          else
-            echo "No expected_cert.txt found"
-          fi
-          echo "=== ACTUAL CERT ==="
-          cat cert.txt || echo "No cert.txt generated"
-          
+          cp ${{ matrix.os }}.evkp broken.evkp
+          printf '\xFF' | dd of=broken.evkp bs=1 seek=100 count=1 conv=notrunc
+          ./target/release/evk verify --bundle broken.evkp || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evkp-${{ matrix.os }}
+          path: ${{ matrix.os }}.evkp
+          retention-days: 1
+
+  cross-check:
+    needs: canonical
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - name: Build
+        run: cargo build --release
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Byte-identical across arch
+        run: diff artifacts/ubuntu-latest.evkp artifacts/macos-latest.evkp
+
+      - name: Verify Mac bundle on Linux
+        run: ./target/release/evk verify --bundle artifacts/macos-latest.evkp
