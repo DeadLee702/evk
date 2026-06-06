@@ -1,52 +1,13 @@
-use sha2::{Sha256, Digest};
+name: Build and Pack
+on: [push, workflow_dispatch]
 
-type Hash = [u8; 32];
-
-pub enum Node {
-    Leaf { data: Vec<u8> }, // Changed from hash to data for real verification
-    Internal { hash: Hash, children: Vec<Node> }
-}
-
-impl Node {
-    // Helper to get hash of a node
-    pub fn get_hash(&self) -> Hash {
-        match self {
-            Node::Leaf { data } => {
-                let mut hasher = Sha256::new();
-                hasher.update(data);
-                hasher.finalize().into()
-            },
-            Node::Internal { hash, .. } => *hash,
-        }
-    }
-
-    pub fn find_mismatch(&self, path: &mut Vec<usize>) -> Option<Vec<usize>> {
-        match self {
-            Node::Leaf { data } => {
-                // Leaf verification: Logic is implicitly handled by get_hash
-                None
-            }
-            Node::Internal { hash, children } => {
-                let mut hasher = Sha256::new();
-                for child in children {
-                    hasher.update(child.get_hash());
-                }
-                let computed: Hash = hasher.finalize().into();
-
-                if computed == *hash {
-                    return None;
-                }
-
-                for (idx, child) in children.iter().enumerate() {
-                    path.push(idx);
-                    if let Some(bad_path) = child.find_mismatch(path) {
-                        return Some(bad_path);
-                    }
-                    path.pop();
-                }
-                Some(path.clone())
-            }
-        }
-    }
-}
-yaml-online-parser.appspot.com
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build and Pack
+        run: |
+          cargo build --release
+          ./target/release/evk pack --job tests/job.evk --snapshot tests/snapshot.evk --input tests/input.bin --output bundle.evkp
