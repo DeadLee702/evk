@@ -1,8 +1,7 @@
 # evk 
 
 ## Pipeline Status
-![CI Status](https://github.com/DeadLee702/evk/actions/workflows/evk.yml/badge.svg)
-
+![CI Status](https://github.com/DeadLee702/evk/actions/workflows/evk.yml/badge.svg?branch=main)
 This project uses an automated cross-platform CI/CD pipeline to ensure bundle integrity. Every commit is validated across Linux and macOS environments to prevent architectural regressions.
 
 ## Usage
