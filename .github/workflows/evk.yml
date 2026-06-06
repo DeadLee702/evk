@@ -99,3 +99,4 @@ jobs:
 
       - name: Verify Mac bundle on Linux
         run: ./target/release/evk verify --bundle artifacts/macos-latest.evkp
+# Force refresh
