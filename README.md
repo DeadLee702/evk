@@ -10,3 +10,4 @@ This project uses an automated cross-platform CI/CD pipeline to ensure bundle in
 ### Pack a bundle:
 ```bash
 ./target/release/evk pack --job tests/job.evk --snapshot tests/snapshot.evk --input tests/input.bin --output bundle.evkp
+Testing current build
