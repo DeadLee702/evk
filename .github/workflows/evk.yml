@@ -2,7 +2,7 @@ name: EVK Canonicalization Gate
 on: [push, workflow_dispatch]
 
 jobs:
-  canonical:
+  canonical-build:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
