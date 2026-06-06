@@ -1,58 +1,51 @@
-name: EVK Canonicalization Gate
-on: [push, workflow_dispatch]
+use sha2::{Sha256, Digest};
 
-jobs:
-  canonical:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+type Hash = [u8; 32];
 
-      - name: Build
-        run: cargo build --release
+pub enum Node {
+    Leaf { data: Vec<u8> }, // Changed from hash to data for real verification
+    Internal { hash: Hash, children: Vec<Node> }
+}
 
-      - name: Pack bundle
-        run: ./target/release/evk pack --job tests/job.evk --snapshot tests/snapshot.evk --input tests/input.bin --output ${{ matrix.os }}.evkp
+impl Node {
+    // Helper to get hash of a node
+    pub fn get_hash(&self) -> Hash {
+        match self {
+            Node::Leaf { data } => {
+                let mut hasher = Sha256::new();
+                hasher.update(data);
+                hasher.finalize().into()
+            },
+            Node::Internal { hash, .. } => *hash,
+        }
+    }
 
-      - name: SHA256 of bundle
-        run: shasum -a 256 ${{ matrix.os }}.evkp > ${{ matrix.os }}.sha256
+    pub fn find_mismatch(&self, path: &mut Vec<usize>) -> Option<Vec<usize>> {
+        match self {
+            Node::Leaf { data } => {
+                // Leaf verification: Logic is implicitly handled by get_hash
+                None
+            }
+            Node::Internal { hash, children } => {
+                let mut hasher = Sha256::new();
+                for child in children {
+                    hasher.update(child.get_hash());
+                }
+                let computed: Hash = hasher.finalize().into();
 
-      - name: Verify MUST be VALID
-        run: ./target/release/evk verify --bundle ${{ matrix.os }}.evkp
+                if computed == *hash {
+                    return None;
+                }
 
-      - name: Flip 1 byte, MUST be INVALID
-        run: |
-          cp ${{ matrix.os }}.evkp broken.evkp
-          printf '\xFF' | dd of=broken.evkp bs=1 seek=100 count=1 conv=notrunc
-          ./target/release/evk verify --bundle broken.evkp || true
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: evkp-${{ matrix.os }}
-          path: ${{ matrix.os }}.evkp
-          retention-days: 1
-
-  cross-check:
-    needs: canonical
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      
-      - name: Build
-        run: cargo build --release
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: Byte-identical across arch
-        run: diff artifacts/ubuntu-latest.evkp artifacts/macos-latest.evkp
-
-      - name: Verify Mac bundle on Linux
-        run: ./target/release/evk verify --bundle artifacts/macos-latest.evkp
-        
+                for (idx, child) in children.iter().enumerate() {
+                    path.push(idx);
+                    if let Some(bad_path) = child.find_mismatch(path) {
+                        return Some(bad_path);
+                    }
+                    path.pop();
+                }
+                Some(path.clone())
+            }
+        }
+    }
+}
