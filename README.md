@@ -9,22 +9,3 @@ This project uses an automated cross-platform CI/CD pipeline to ensure bundle in
 ### Pack a bundle:
 ```bash
 ./target/release/evk pack --job tests/job.evk --snapshot tests/snapshot.evk --input tests/input.bin --output bundle.evkp
-Testing current build
- 
-## Verification Status
-✅ **Determinism Verified: 12/12 Adversarial Tests Pass**
-
-See [adversarial-compliance-matrix](https://github.com/DeadLee702/adversarial-compliance-matrix) for the full test suite.
-
-The bundle validator catches:
-- Handoff conflicts
-- Race conditions
-- Schema mutations
-- Timestamp drift
-- [... all 12 incident types]
-
-## Related Projects
-This is part of a three-layer deterministic verification stack:
-- **[evk](https://github.com/DeadLee702/evk)** ← You are here (Bundle validation & determinism)
-- **[gemini-box](https://github.com/DeadLee702/gemini-box)** (Cryptographic signing & verification)
-- **[adversarial-compliance-matrix](https://github.com/DeadLee702/adversarial-compliance-matrix)** (12 incident detection tests)
