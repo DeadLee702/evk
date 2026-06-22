@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use anyhow::{Result, Context};
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 use sha2::{Sha256, Digest};
 use zip::write::{FileOptions, ZipWriter};
@@ -17,7 +17,19 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Verify { file: PathBuf },
+    Verify { 
+        file: PathBuf 
+    },
+    Pack {
+        #[arg(long)]
+        job: String,
+        #[arg(long)]
+        snapshot: String,
+        #[arg(long)]
+        input: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -41,7 +53,25 @@ fn main() -> Result<()> {
 
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
+        Commands::Pack { job, snapshot, input, output } => {
+            // Create a ZIP file at the output path
+            let zip_file = File::create(&output).context("Failed to create .evkp file")?;
+            let mut zip = ZipWriter::new(zip_file);
+            
+            // Add metadata
+            let metadata = json!({
+                "job": job,
+                "snapshot": snapshot,
+                "timestamp": Utc::now().to_rfc3339(),
+                "version": "1.0"
+            });
+            
+            let metadata_str = serde_json::to_string_pretty(&metadata)?;
+            zip.start_file("metadata.json", FileOptions::default())?;
+            zip.write_all(metadata_str.as_bytes())?;
+            
+            println!("✓ Created .evkp bundle: {}", output.display());
+        }
     }
     Ok(())
 }
-
