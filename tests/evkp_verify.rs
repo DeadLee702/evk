@@ -4,6 +4,7 @@ use std::io::Read;
 use zip::ZipArchive;
 
 #[test]
+#[ignore = "Requires fixtures/sample.evkp to be present"]
 fn evkp_verify_manifest_and_hashes() -> anyhow::Result<()> {
     let evkp_path = "fixtures/sample.evkp"; // put a test bundle here
     let zip_file = fs::File::open(evkp_path)?;
