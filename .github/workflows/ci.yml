@@ -1,0 +1,54 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  canonical:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build release binary
+        run: cargo build --release --verbose
+
+      - name: Run cargo tests
+        run: cargo test --release --verbose
+
+      - name: List repo (debug)
+        run: ls -la
+
+      - name: Pack bundle
+        run: |
+          ./target/release/evk pack \
+            --job canonical \
+            --snapshot ubuntu-latest \
+            --input . \
+            --output ubuntu-latest.evkp
+
+      - name: Verify pack output
+        run: ls -la ubuntu-latest.evkp || (echo "evkp missing" && exit 1)
+
+      - name: Upload .evkp artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-latest.evkp
+          path: ubuntu-latest.evkp
+          retention-days: 7
