@@ -15,4 +15,4 @@ jobs:
       - name: Build
         run: cargo build --release --verbose
       - name: Test
-        run: cargo test --release --verbose --nocapture
+        run: cargo test --release --verbose -- --nocapture
