@@ -10,9 +10,13 @@ fn evkp_verify_manifest_and_hashes() -> anyhow::Result<()> {
     let mut zip = ZipArchive::new(zip_file)?;
 
     // 1. Load manifest.json
-    let mut manifest_file = zip.by_name("manifest.json")?;
-    let mut manifest_str = String::new();
-    manifest_file.read_to_string(&mut manifest_str)?;
+    let manifest_str = {
+        let mut manifest_file = zip.by_name("manifest.json")?;
+        let mut s = String::new();
+        manifest_file.read_to_string(&mut s)?;
+        s
+    }; // manifest_file dropped here, zip borrow ends
+
     let manifest: serde_json::Value = serde_json::from_str(&manifest_str)?;
 
     // 2. Verify manifest_hash
