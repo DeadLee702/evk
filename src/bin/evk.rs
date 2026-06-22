@@ -68,7 +68,7 @@ fn main() -> Result<()> {
             
             let metadata_str = serde_json::to_string_pretty(&metadata)?;
             zip.start_file("metadata.json", FileOptions::default())?;
-            zip.write_all(metadata_str.as_bytes())?;
+            zip.write(metadata_str.as_bytes())?;
             
             println!("✓ Created .evkp bundle: {}", output.display());
         }
