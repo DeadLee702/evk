@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use anyhow::{Result, Context};
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use sha2::{Sha256, Digest};
 use zip::write::{FileOptions, ZipWriter};
