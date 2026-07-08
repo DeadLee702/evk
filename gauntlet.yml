@@ -1,0 +1,61 @@
+gauntlet_rooms:
+  - id: 1
+    name: oracle
+    zodiac: Aries
+    attack_vector: brute_force
+    signature: impulsive_main_push
+  - id: 2
+    name: alighostest
+    zodiac: Taurus
+    attack_vector: hard_coded_secrets
+    signature: config_refusal
+  - id: 3
+    name: bridge
+    zodiac: Gemini
+    attack_vector: mitm
+    signature: dual_personality_api
+  - id: 4
+    name: perjanocyst
+    zodiac: Cancer
+    attack_vector: social_engineering
+    signature: guilt_trip_phish
+  - id: 5
+    name: trapzonar
+    zodiac: Leo
+    attack_vector: ddos
+    signature: log_spam
+  - id: 6
+    name: kitchzensync
+    zodiac: Virgo
+    attack_vector: supply_chain
+    signature: linter_blind_spot
+  - id: 7
+    name: pendulastika
+    zodiac: Libra
+    attack_vector: race_condition
+    signature: load_balance_tip
+  - id: 8
+    name: esperanto
+    zodiac: Scorpio
+    attack_vector: poisoned_dependency
+    signature: dormant_strike
+  - id: 9
+    name: fantomlumo
+    zodiac: Sagittarius
+    attack_vector: over_scoping
+    signature: wildcard_perms
+  - id: 10
+    name: duelkaptilo
+    zodiac: Capricorn
+    attack_vector: privilege_escalation
+    signature: slow_trust_climb
+  - id: 11
+    name: panikcxambro
+    zodiac: Aquarius
+    attack_vector: logic_bomb
+    signature: chaos_injection
+  - id: 12
+    name: titanic
+    zodiac: Pisces
+    attack_vector: illusion
+    signature: unsinkable_claim
