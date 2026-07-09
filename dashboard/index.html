@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Gauntletized Z-12</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white">
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        const ZODIAC_ICONS = {
+            Aries: "♈", Taurus: "♉", Gemini: "♊", Cancer: "♋",
+            Leo: "♌", Virgo: "♍", Libra: "♎", Scorpio: "♏",
+            Sagittarius: "♐", Capricorn: "♑", Aquarius: "♒", Pisces: "♓"
+        };
+        
+        const STATUS_COLORS = {
+            PURA: "bg-green-500 border-green-300",
+            VIGLA: "bg-yellow-500 border-yellow-300", 
+            POLUITA: "bg-red-500 border-red-300 animate-pulse"
+        };
+        
+        function Dashboard() {
+            const [data, setData] = useState(null);
+            const [selected, setSelected] = useState(null);
+            
+            const fetchHealth = async () => {
+                const res = await fetch('/api/health');
+                setData(await res.json());
+            };
+            
+            useEffect(() => {
+                fetchHealth();
+                const interval = setInterval(fetchHealth, 30000); // 30s refresh
+                return () => clearInterval(interval);
+            }, []);
+            
+            if (!data) return <div className="flex h-screen items-center justify-center">Initializing Z-12...</div>;
+            
+            return (
+                <div className="min-h-screen p-8">
+                    <div className="text-center mb-8">
+                        <h1 className="text-4xl font-bold mb-2">Gauntletized Z-12</h1>
+                        <div className="text-2xl">
+                            Health Score: <span className={data.health_score === 100 ? "text-green-400" : "text-red-400"}>
+                                {data.reports.filter(r => r.status === "PURA").length}/12 {data.gauntlet_status}
+                            </span>
+                        </div>
+                        <div className="text-sm text-gray-400 mt-1">Last scan: {new Date(data.timestamp).toLocaleString()}</div>
+                    </div>
+                    
+                    <div className="grid grid-cols-4 gap-4 max-w-5xl mx-auto">
+                        {data.reports.map(room => (
+                            <div key={room.zodiac} 
+                                 onClick={() => setSelected(room)}
+                                 className={`${STATUS_COLORS[room.status]} p-6 rounded-lg border-2 cursor-pointer hover:scale-105 transition-all`}>
+                                <div className="text-5xl text-center mb-2">{ZODIAC_ICONS[room.zodiac]}</div>
+                                <div className="text-xl font-bold text-center">{room.zodiac}</div>
+                                <div className="text-xs text-center opacity-80">{room.attack}</div>
+                                <div className="text-center mt-2 font-mono text-sm">{room.status}</div>
+                            </div>
+                        ))}
+                    </div>
+                    
+                    {selected && (
+                        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center" onClick={() => setSelected(null)}>
+                            <div className="bg-gray-800 p-6 rounded-lg max-w-md" onClick={e => e.stopPropagation()}>
+                                <h2 className="text-2xl font-bold mb-4">{ZODIAC_ICONS[selected.zodiac]} {selected.zodiac}</h2>
+                                <p><b>Attack Guarded:</b> {selected.attack}</p>
+                                <p><b>Status:</b> <span className={selected.status === "PURA" ? "text-green-400" : "text-red-400"}>{selected.status}</span></p>
+                                <p><b>Last Check:</b> {new Date(selected.last_check).toLocaleString()}</p>
+                                <button className="mt-4 bg-blue-600 px-4 py-2 rounded" onClick={() => setSelected(null)}>Close</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        ReactDOM.render(<Dashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html>
