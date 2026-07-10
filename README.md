@@ -207,4 +207,3 @@ Operational control plane.
 - State reporting
 - Platform health
 - Operational awareness
-- 
