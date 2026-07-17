@@ -1,10 +1,9 @@
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
 use zip::ZipArchive;
 
 #[test]
-#[ignore = "Requires fixtures/sample.evkp to be present"]
 fn evkp_verify_manifest_and_hashes() -> anyhow::Result<()> {
     let evkp_path = "fixtures/sample.evkp"; // put a test bundle here
     let zip_file = fs::File::open(evkp_path)?;
@@ -22,10 +21,16 @@ fn evkp_verify_manifest_and_hashes() -> anyhow::Result<()> {
 
     // 2. Verify manifest_hash
     let mut manifest_no_hash = manifest.clone();
-    manifest_no_hash.as_object_mut().unwrap().remove("manifest_hash");
+    manifest_no_hash
+        .as_object_mut()
+        .unwrap()
+        .remove("manifest_hash");
     let canonical = serde_json::to_string(&manifest_no_hash)?; // must match your canonical rules
     let computed_hash = format!("sha256:{:x}", Sha256::digest(canonical.as_bytes()));
-    assert_eq!(manifest["manifest_hash"], computed_hash, "manifest_hash mismatch");
+    assert_eq!(
+        manifest["manifest_hash"], computed_hash,
+        "manifest_hash mismatch"
+    );
 
     // 3. Verify each file hash in order
     let files = manifest["files"].as_array().unwrap();
