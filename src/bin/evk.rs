@@ -53,7 +53,7 @@ fn entry_name(path: &Path) -> Result<String> {
 fn pack(job: &Path, snapshot: &Path, input: &Path, output: &Path) -> Result<()> {
     let zip_file = File::create(output).context("Failed to create .evkp file")?;
     let mut zip = ZipWriter::new(zip_file);
-    let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
     let mut files = Vec::new();
     let mut order = Vec::new();
