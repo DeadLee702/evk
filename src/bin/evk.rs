@@ -1,8 +1,9 @@
 use anyhow::{bail, Context, Result};
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use clap::{Parser, Subcommand};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::env;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -50,10 +51,25 @@ fn entry_name(path: &Path) -> Result<String> {
         .with_context(|| format!("invalid file name: {}", path.display()))
 }
 
+fn deterministic_created() -> String {
+    match env::var("SOURCE_DATE_EPOCH") {
+        Ok(val) => {
+            let secs = val.trim().parse::<i64>().unwrap_or(0);
+            Utc.timestamp_opt(secs, 0)
+                .single()
+                .unwrap_or_else(|| Utc.timestamp_opt(0, 0).single().unwrap())
+                .to_rfc3339()
+        }
+        Err(_) => "1970-01-01T00:00:00+00:00".to_string(),
+    }
+}
+
 fn pack(job: &Path, snapshot: &Path, input: &Path, output: &Path) -> Result<()> {
     let zip_file = File::create(output).context("Failed to create .evkp file")?;
     let mut zip = ZipWriter::new(zip_file);
-    let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    let options = FileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored)
+        .last_modified_time(zip::DateTime::default());
 
     let mut files = Vec::new();
     let mut order = Vec::new();
@@ -75,7 +91,7 @@ fn pack(job: &Path, snapshot: &Path, input: &Path, output: &Path) -> Result<()> 
     // using serde_json's canonical (sorted-key) serialization.
     let mut manifest = json!({
         "version": "1.0",
-        "created": Utc::now().to_rfc3339(),
+        "created": deterministic_created(),
         "files": files,
         "order": order,
     });
