@@ -1,0 +1,13 @@
+/target
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Kill Vector (C) build artifacts
+*.o
+/test_killswitch_runner
+/pike_reaper
+
+# Runtime-generated orchestration output
+GAUNTLET_HEALTH_REPORT.json

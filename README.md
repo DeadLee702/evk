@@ -6,204 +6,110 @@
 
 ## Why Z-12 Exists
 
-Modern software systems increasingly rely on autonomous services, AI agents, automation pipelines, and distributed infrastructure to make decisions in real time.
+Modern software systems increasingly rely on autonomous services, AI agents, automation pipelines, and distributed infrastructure to make decisions in real time. As these systems become more capable, the consequences of executing unverified actions become significantly greater.
 
-As these systems become more capable, the consequences of executing unverified actions become significantly greater.
-
-Traditional security solutions often focus on observing events after they occur or responding once an incident has already happened.
-
-Z-12 approaches the problem differently.
-
-Instead of assuming execution should proceed unless something appears suspicious, Z-12 establishes multiple layers of verification before, during, and after runtime.
-
-The objective is simple:
+Traditional security solutions often focus on observing events after they occur or responding once an incident has already happened. Z-12 approaches the problem differently: instead of assuming execution should proceed unless something appears suspicious, Z-12 establishes multiple layers of verification before, during, and after runtime.
 
 **Verify trust before execution. Continuously validate runtime behavior. Enforce policy when required.**
 
 ---
 
-# Executive Summary
-
-Z-12 is a layered runtime security platform designed to provide deterministic verification, hardened execution environments, continuous compliance validation, and runtime enforcement for modern software systems.
-
-Rather than functioning as a single security tool, Z-12 combines multiple independent security layers into a unified platform.
-
-The ecosystem currently consists of:
+## Ecosystem
 
 | Repository | Purpose |
 |------------|---------|
-| **EVK** | Deterministic identity and integrity verification |
-| **Gemini-Box** | Hardened execution environment |
-| **Adversarial Compliance Matrix** | Continuous runtime validation |
-| **Kill Vector** | Runtime enforcement and threat containment |
-| **Z-12 Dashboard** | Unified operational visibility |
+| **EVK** (this repo) | Deterministic identity and integrity verification **+ Kill Vector runtime enforcement** |
+| **[Gemini-Box](https://github.com/DeadLee702/gemini-box)** | Hardened execution environment (ed25519 signing) |
+| **[Adversarial Compliance Matrix](https://github.com/DeadLee702/adversarial-compliance-matrix)** | Continuous runtime validation |
+| **Z-12 Dashboard** (`dashboard/`) | Unified operational visibility |
 
 Each layer performs one responsibility while contributing to the overall runtime security posture.
 
 ---
 
-# Core Principles
-
-Z-12 is designed around five engineering principles.
-
-## 1. Deterministic Verification
-
-Identity and integrity should be verified before execution whenever possible.
-
----
-
-## 2. Layered Security
-
-Each component performs a single responsibility.
-
-No single component is expected to solve every security problem.
-
----
-
-## 3. Runtime Enforcement
-
-Detection without enforcement provides visibility.
-
-Detection combined with enforcement provides control.
-
----
-
-## 4. Observable Operations
-
-Security systems should clearly communicate their current state.
-
-Operators should never need to guess what the platform is doing.
-
----
-
-## 5. Modular Architecture
-
-Every major component can evolve independently while remaining part of the larger ecosystem.
-
----
-
-# Repository Ecosystem
+## What lives in this repository
 
 ```text
-                         Z-12 Platform
-
-                               │
-                               ▼
-
-                    Z-12 Dashboard (Control Plane)
-
-                               │
-        ┌──────────────────────┼──────────────────────┐
-        │                      │                      │
-
-        ▼                      ▼                      ▼
-
-      EVK                Gemini-Box        Compliance Matrix
-
-        │                      │                      │
-
-        └──────────────┬───────┴──────────────┬──────┘
-                       │                      │
-                       ▼                      ▼
-
-                 Kill Vector          Runtime Telemetry
-
-                       │
-                       ▼
-
-                  Enforcement Layer
+evk/
+├── src/lib.rs, src/bin/evk.rs   # EVK deterministic verify/pack (.evkp, SHA-256 manifests)  [Rust]
+├── src/kill_vector/             # Kill Vector runtime enforcement engine                      [C]
+│   ├── killswitch.h             #   enforcement API
+│   └── killswitch.c             #   SIGKILL + forensic log, unsafe-PID guard
+├── src/sensors/pike_reaper/     # Pike/Reaper -> ACM_DENY -> Kill Vector integration (scaffold) [C]
+├── tests/                       # evkp_verify (Rust) + test_killswitch (C)
+├── gauntlet/                    # 12 defensive Room.verify() detectors                        [Python]
+├── master_runner.py            # orchestrator: 12 rooms + EVK core -> health report
+├── judge/cop_v1.py             # COP judge: PURA / MALPURA verdict
+├── mha_run.sh                  # pipeline driver (exit 0=PURA, 1=MALPURA, 2=critical)
+├── dashboard/index.html        # React/Tailwind control plane (reads /api/health)
+└── Makefile                    # builds the C Kill Vector subsystem
 ```
 
 ---
 
-# Platform Components
+## Quick start
 
-## EVK
+### EVK core (Rust)
+```bash
+cargo build --release --locked
+cargo test  --release --locked -- --nocapture
+./target/release/evk verify --bundle fixtures/sample.evkp --cert
+```
 
-**Role**
+### Kill Vector (C)
+```bash
+make test_killswitch     # builds + runs the enforcement test -> "Kill Vector Test: PASS"
+make reaper              # builds the Pike/Reaper integration scaffold
+```
 
-Deterministic verification engine.
+The Kill Vector terminates a policy-denied process (`kill(pid, SIGKILL)`), refuses
+unsafe PIDs (`pid <= 1`), and appends a forensic record to `/var/log/z12/kill.log`
+(override with `Z12_KILL_LOG`) in the form:
 
-### Responsibilities
+```text
+[1720000000] PID=4521 REASON=POLUITA_LINEAGE ACTION=SIGKILL
+```
 
-- Identity verification
-- Integrity validation
-- Cryptographic attestation
-- Pre-execution trust establishment
-
----
-
-## Gemini-Box
-
-**Role**
-
-Hardened execution environment.
-
-### Responsibilities
-
-- Environment isolation
-- Configuration protection
-- Runtime consistency
-- Execution boundary enforcement
-
----
-
-## Adversarial Compliance Matrix
-
-**Role**
-
-Continuous runtime validation engine.
-
-### Responsibilities
-
-- Runtime inspection
-- Policy validation
-- Compliance monitoring
-- Threat simulation
-- State evaluation
+### Health pipeline + dashboard
+```bash
+pip install -r requirements.txt
+./mha_run.sh                                  # build -> gauntlet -> judge -> verdict
+python master_runner.py --serve               # live dashboard at http://127.0.0.1:8000
+```
 
 ---
 
-## Kill Vector
+## Enforcement flow
 
-**Role**
+```text
+Pike sensor ─▶ runtime event ─▶ ACM decision ─▶ ACM_DENY ─▶ Kill Vector ─▶ SIGKILL + forensic log
+```
 
-Runtime enforcement engine.
-
-### Responsibilities
-
-- Policy enforcement
-- Runtime response
-- Threat containment
-- Enforcement workflows
+`handle_acm_decision()` in `src/sensors/pike_reaper/reaper/src/main.c` is the
+concrete integration point (tested via `make test_killswitch`).
 
 ---
 
-## Ghost Matrix
+## Core principles
+1. **Deterministic verification** — verify identity/integrity before execution.
+2. **Layered security** — each component owns one responsibility.
+3. **Runtime enforcement** — detection *plus* enforcement provides control.
+4. **Observable operations** — the platform always reports its current state.
+5. **Modular architecture** — components evolve independently.
 
-**Role**
-
-Containment environment.
-
-### Responsibilities
-
-- Controlled isolation
-- Runtime observation
-- Incident analysis
-- Safe execution boundaries
+## Health states
+| State | Meaning |
+|---|---|
+| **PURA** | Healthy |
+| **VIGLA** | Warning |
+| **POLUITA** | Compromised |
 
 ---
 
-## Z-12 Dashboard
+## Honesty notes
+- The Kill Vector engine and its test are **real and working**. The Pike/Reaper
+  sensor and the ACM transport are **scaffolds** — no live event source is wired.
+- Gauntlet rooms are rule-based **demonstrations**; no detection-accuracy benchmarks
+  are claimed. **Ghost Matrix** is a containment *concept*, not yet an implemented service.
 
-**Role**
-
-Operational control plane.
-
-### Responsibilities
-
-- Real-time monitoring
-- Runtime visualization
-- State reporting
-- Platform health
-- Operational awareness
+MIT licensed (see `LICENSE`).
