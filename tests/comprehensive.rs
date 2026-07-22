@@ -8,7 +8,9 @@ use zip::ZipArchive;
 // ─── Merkle tree unit tests ───────────────────────────────────────────
 
 fn leaf(data: &[u8]) -> Node {
-    Node::Leaf { data: data.to_vec() }
+    Node::Leaf {
+        data: data.to_vec(),
+    }
 }
 
 fn consistent_internal(children: Vec<Node>) -> Node {
@@ -141,10 +143,10 @@ fn identical_leaves_produce_identical_hashes() {
 // ─── CLI pack/verify round-trip tests ─────────────────────────────────
 
 fn cargo_bin(name: &str) -> PathBuf {
-    // Tests run from the crate root; debug binaries live under target/debug
+    // CI runs `cargo test --release`, so binaries live under target/release
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("target");
-    path.push("debug");
+    path.push("release");
     path.push(name);
     path
 }
@@ -156,11 +158,7 @@ struct TempDir {
 impl TempDir {
     fn new(prefix: &str) -> Self {
         let mut path = std::env::temp_dir();
-        path.push(format!(
-            "evk_test_{}_{}",
-            prefix,
-            std::process::id()
-        ));
+        path.push(format!("evk_test_{}_{}", prefix, std::process::id()));
         fs::create_dir_all(&path).unwrap();
         TempDir { path }
     }
@@ -207,10 +205,14 @@ fn create_bundle(tmp: &TempDir) -> PathBuf {
 
     let (ok, stdout, stderr) = run_evk(&[
         "pack",
-        "--job", job.to_str().unwrap(),
-        "--snapshot", snapshot.to_str().unwrap(),
-        "--input", input.to_str().unwrap(),
-        "--output", output.to_str().unwrap(),
+        "--job",
+        job.to_str().unwrap(),
+        "--snapshot",
+        snapshot.to_str().unwrap(),
+        "--input",
+        input.to_str().unwrap(),
+        "--output",
+        output.to_str().unwrap(),
     ]);
     assert!(ok, "pack failed: {} {}", stdout, stderr);
     assert!(output.exists(), "bundle file was not created");
@@ -244,7 +246,10 @@ fn pack_manifest_has_correct_structure() {
     let mut zip = open_zip(&bundle);
 
     let mut manifest_bytes = Vec::new();
-    zip.by_name("manifest.json").unwrap().read_to_end(&mut manifest_bytes).unwrap();
+    zip.by_name("manifest.json")
+        .unwrap()
+        .read_to_end(&mut manifest_bytes)
+        .unwrap();
     let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes).unwrap();
 
     assert_eq!(manifest["version"], "1.0");
@@ -271,11 +276,17 @@ fn pack_manifest_hash_is_correct() {
     let mut zip = open_zip(&bundle);
 
     let mut manifest_bytes = Vec::new();
-    zip.by_name("manifest.json").unwrap().read_to_end(&mut manifest_bytes).unwrap();
+    zip.by_name("manifest.json")
+        .unwrap()
+        .read_to_end(&mut manifest_bytes)
+        .unwrap();
     let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes).unwrap();
 
     let mut manifest_no_hash = manifest.clone();
-    manifest_no_hash.as_object_mut().unwrap().remove("manifest_hash");
+    manifest_no_hash
+        .as_object_mut()
+        .unwrap()
+        .remove("manifest_hash");
     let canonical = serde_json::to_string(&manifest_no_hash).unwrap();
     let computed = format!("sha256:{:x}", Sha256::digest(canonical.as_bytes()));
     assert_eq!(manifest["manifest_hash"].as_str().unwrap(), computed);
@@ -288,7 +299,10 @@ fn pack_file_hashes_match_zip_contents() {
     let mut zip = open_zip(&bundle);
 
     let mut manifest_bytes = Vec::new();
-    zip.by_name("manifest.json").unwrap().read_to_end(&mut manifest_bytes).unwrap();
+    zip.by_name("manifest.json")
+        .unwrap()
+        .read_to_end(&mut manifest_bytes)
+        .unwrap();
     let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes).unwrap();
 
     for entry in manifest["files"].as_array().unwrap() {
@@ -307,9 +321,7 @@ fn verify_clean_bundle_succeeds() {
     let tmp = TempDir::new("verify_clean");
     let bundle = create_bundle(&tmp);
 
-    let (ok, stdout, _stderr) = run_evk(&[
-        "verify", "--bundle", bundle.to_str().unwrap(),
-    ]);
+    let (ok, stdout, _stderr) = run_evk(&["verify", "--bundle", bundle.to_str().unwrap()]);
     assert!(ok, "verify should succeed for clean bundle: {}", stdout);
     assert!(stdout.contains("VALID"));
 }
@@ -319,9 +331,8 @@ fn verify_with_cert_emits_cert_line() {
     let tmp = TempDir::new("verify_cert");
     let bundle = create_bundle(&tmp);
 
-    let (ok, stdout, _stderr) = run_evk(&[
-        "verify", "--bundle", bundle.to_str().unwrap(), "--cert",
-    ]);
+    let (ok, stdout, _stderr) =
+        run_evk(&["verify", "--bundle", bundle.to_str().unwrap(), "--cert"]);
     assert!(ok);
     assert!(stdout.contains("VALID"));
     assert!(stdout.contains("CERT:"));
@@ -330,9 +341,7 @@ fn verify_with_cert_emits_cert_line() {
 
 #[test]
 fn verify_nonexistent_bundle_fails() {
-    let (ok, _stdout, stderr) = run_evk(&[
-        "verify", "--bundle", "/nonexistent/path/bundle.evkp",
-    ]);
+    let (ok, _stdout, stderr) = run_evk(&["verify", "--bundle", "/nonexistent/path/bundle.evkp"]);
     assert!(!ok);
     assert!(stderr.contains("Failed to open bundle") || stderr.contains("not a valid"));
 }
@@ -344,10 +353,14 @@ fn pack_nonexistent_input_fails() {
 
     let (ok, _stdout, stderr) = run_evk(&[
         "pack",
-        "--job", "/nonexistent/job.txt",
-        "--snapshot", "/nonexistent/snap.bin",
-        "--input", "/nonexistent/input.dat",
-        "--output", output.to_str().unwrap(),
+        "--job",
+        "/nonexistent/job.txt",
+        "--snapshot",
+        "/nonexistent/snap.bin",
+        "--input",
+        "/nonexistent/input.dat",
+        "--output",
+        output.to_str().unwrap(),
     ]);
     assert!(!ok);
     assert!(stderr.contains("Failed to read evidence file") || stderr.contains("No such file"));
@@ -369,10 +382,17 @@ fn pack_is_deterministic_with_source_date_epoch() {
 
     let run = |output: &PathBuf| {
         std::process::Command::new(cargo_bin("evk"))
-            .args(["pack", "--job", job.to_str().unwrap(),
-                   "--snapshot", snapshot.to_str().unwrap(),
-                   "--input", input.to_str().unwrap(),
-                   "--output", output.to_str().unwrap()])
+            .args([
+                "pack",
+                "--job",
+                job.to_str().unwrap(),
+                "--snapshot",
+                snapshot.to_str().unwrap(),
+                "--input",
+                input.to_str().unwrap(),
+                "--output",
+                output.to_str().unwrap(),
+            ])
             .env("SOURCE_DATE_EPOCH", "1700000000")
             .output()
             .unwrap();
@@ -383,7 +403,10 @@ fn pack_is_deterministic_with_source_date_epoch() {
 
     let bytes1 = fs::read(&out1).unwrap();
     let bytes2 = fs::read(&out2).unwrap();
-    assert_eq!(bytes1, bytes2, "pack output should be byte-identical with fixed SOURCE_DATE_EPOCH");
+    assert_eq!(
+        bytes1, bytes2,
+        "pack output should be byte-identical with fixed SOURCE_DATE_EPOCH"
+    );
 }
 
 #[test]
@@ -399,21 +422,34 @@ fn pack_created_uses_source_date_epoch() {
     write_file(&input, b"i");
 
     std::process::Command::new(cargo_bin("evk"))
-        .args(["pack", "--job", job.to_str().unwrap(),
-               "--snapshot", snapshot.to_str().unwrap(),
-               "--input", input.to_str().unwrap(),
-               "--output", output.to_str().unwrap()])
+        .args([
+            "pack",
+            "--job",
+            job.to_str().unwrap(),
+            "--snapshot",
+            snapshot.to_str().unwrap(),
+            "--input",
+            input.to_str().unwrap(),
+            "--output",
+            output.to_str().unwrap(),
+        ])
         .env("SOURCE_DATE_EPOCH", "1700000000")
         .output()
         .unwrap();
 
     let mut zip = open_zip(&output);
     let mut manifest_bytes = Vec::new();
-    zip.by_name("manifest.json").unwrap().read_to_end(&mut manifest_bytes).unwrap();
+    zip.by_name("manifest.json")
+        .unwrap()
+        .read_to_end(&mut manifest_bytes)
+        .unwrap();
     let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes).unwrap();
 
     // 1700000000 seconds since epoch = 2023-11-14T22:13:20+00:00
-    assert_eq!(manifest["created"].as_str().unwrap(), "2023-11-14T22:13:20+00:00");
+    assert_eq!(
+        manifest["created"].as_str().unwrap(),
+        "2023-11-14T22:13:20+00:00"
+    );
 }
 
 #[test]
@@ -430,20 +466,33 @@ fn pack_default_created_is_epoch() {
 
     // Ensure SOURCE_DATE_EPOCH is not set
     std::process::Command::new(cargo_bin("evk"))
-        .args(["pack", "--job", job.to_str().unwrap(),
-               "--snapshot", snapshot.to_str().unwrap(),
-               "--input", input.to_str().unwrap(),
-               "--output", output.to_str().unwrap()])
+        .args([
+            "pack",
+            "--job",
+            job.to_str().unwrap(),
+            "--snapshot",
+            snapshot.to_str().unwrap(),
+            "--input",
+            input.to_str().unwrap(),
+            "--output",
+            output.to_str().unwrap(),
+        ])
         .env_remove("SOURCE_DATE_EPOCH")
         .output()
         .unwrap();
 
     let mut zip = open_zip(&output);
     let mut manifest_bytes = Vec::new();
-    zip.by_name("manifest.json").unwrap().read_to_end(&mut manifest_bytes).unwrap();
+    zip.by_name("manifest.json")
+        .unwrap()
+        .read_to_end(&mut manifest_bytes)
+        .unwrap();
     let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes).unwrap();
 
-    assert_eq!(manifest["created"].as_str().unwrap(), "1970-01-01T00:00:00+00:00");
+    assert_eq!(
+        manifest["created"].as_str().unwrap(),
+        "1970-01-01T00:00:00+00:00"
+    );
 }
 
 #[test]
@@ -477,9 +526,7 @@ fn verify_tampered_manifest_hash_fails() {
     }
     zw.finish().unwrap();
 
-    let (ok, _stdout, stderr) = run_evk(&[
-        "verify", "--bundle", tampered.to_str().unwrap(),
-    ]);
+    let (ok, _stdout, stderr) = run_evk(&["verify", "--bundle", tampered.to_str().unwrap()]);
     assert!(!ok, "verify should fail for tampered manifest_hash");
     assert!(stderr.contains("manifest_hash mismatch") || stderr.contains("INVALID"));
 }
@@ -513,9 +560,7 @@ fn verify_tampered_file_content_fails() {
     }
     zw.finish().unwrap();
 
-    let (ok, _stdout, stderr) = run_evk(&[
-        "verify", "--bundle", tampered.to_str().unwrap(),
-    ]);
+    let (ok, _stdout, stderr) = run_evk(&["verify", "--bundle", tampered.to_str().unwrap()]);
     assert!(!ok, "verify should fail for tampered file content");
     assert!(stderr.contains("hash mismatch") || stderr.contains("INVALID"));
 }
@@ -533,9 +578,7 @@ fn verify_missing_manifest_fails() {
     std::io::Write::write_all(&mut zw, b"no manifest here").unwrap();
     zw.finish().unwrap();
 
-    let (ok, _stdout, stderr) = run_evk(&[
-        "verify", "--bundle", bundle.to_str().unwrap(),
-    ]);
+    let (ok, _stdout, stderr) = run_evk(&["verify", "--bundle", bundle.to_str().unwrap()]);
     assert!(!ok);
     assert!(stderr.contains("manifest") || stderr.contains("missing"));
 }
@@ -555,16 +598,19 @@ fn pack_then_verify_round_trip_multiple_files() {
     write_file(&input, &[]); // empty input file
 
     let (ok, stdout, stderr) = run_evk(&[
-        "pack", "--job", job.to_str().unwrap(),
-        "--snapshot", snapshot.to_str().unwrap(),
-        "--input", input.to_str().unwrap(),
-        "--output", output.to_str().unwrap(),
+        "pack",
+        "--job",
+        job.to_str().unwrap(),
+        "--snapshot",
+        snapshot.to_str().unwrap(),
+        "--input",
+        input.to_str().unwrap(),
+        "--output",
+        output.to_str().unwrap(),
     ]);
     assert!(ok, "pack failed: {} {}", stdout, stderr);
 
-    let (ok, stdout, _stderr) = run_evk(&[
-        "verify", "--bundle", output.to_str().unwrap(),
-    ]);
+    let (ok, stdout, _stderr) = run_evk(&["verify", "--bundle", output.to_str().unwrap()]);
     assert!(ok, "verify failed: {}", stdout);
     assert!(stdout.contains("VALID"));
     assert!(stdout.contains("\"files_verified\": 3"));
