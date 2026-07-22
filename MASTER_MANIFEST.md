@@ -10,11 +10,19 @@ An index of the EVK repository and what each part is for.
 | `Cargo.lock` | Pinned dependency graph for reproducible `--locked` builds. |
 | `src/lib.rs` | Merkle-style `Node` (`Leaf`/`Internal`) with `get_hash`, `internal_hash`, `find_mismatch`; unit tested. |
 | `src/bin/evk.rs` | CLI: `pack` (build an `.evkp` bundle) and `verify` (validate a bundle). |
-| `tests/evkp_verify.rs` | Integration test that verifies `fixtures/sample.evkp`. |
-| `tests/job.evk`, `tests/snapshot.evk`, `tests/input.bin` | Sample evidence inputs. |
-| `tests/expected_cert.txt` | Reference certificate text. |
-| `fixtures/sample.evkp` | Prebuilt bundle used by the integration test. |
-| `fixtures/nist-m57.json` | Sample dataset reference. |
+| `tests/comprehensive.rs` | 26 integration tests: Merkle tree edge cases, CLI pack/verify round-trip, tamper detection, determinism, manifest validation. |
+| `tests/evkp_verify.rs` | Self-contained integration test that packs and verifies a bundle at runtime. |
+| `tests/test_killswitch.c` | Kill Vector enforcement test (C). |
+| `fixtures/sample.evkp` | Prebuilt bundle used by the README quick-start example. |
+
+## C subsystem (Kill Vector)
+
+| Path | Purpose |
+|------|---------|
+| `src/kill_vector/killswitch.h` | Enforcement API header. |
+| `src/kill_vector/killswitch.c` | SIGKILL + forensic log, unsafe-PID guard. |
+| `src/sensors/pike_reaper/reaper/src/main.c` | Pike/Reaper -> ACM_DENY -> Kill Vector integration scaffold. |
+| `Makefile` | Builds the C Kill Vector subsystem. |
 
 ## Documentation
 
@@ -28,8 +36,9 @@ An index of the EVK repository and what each part is for.
 | `ROADMAP.md` | Planned direction. |
 | `LICENSE` | MIT license. |
 | `MASTER_MANIFEST.md` | This file. |
-| `docs/` | Supplementary notes (architecture, accuracy, dataset, logs). |
-| `ACCURACY.md`, `DATASET.md`, `LOGS.md`, `CITATIONS.md`, `WHITEPAPER.md`, `TRY-IT-OUT.md`, `devpost.md` | Project write-ups / hackathon material. |
+| `WHITEPAPER.md` | Project write-up. |
+| `TRY-IT-OUT.md` | Quick-start guide. |
+| `CITATIONS.md` | Citations. |
 
 ## CI/CD
 
@@ -41,14 +50,14 @@ An index of the EVK repository and what each part is for.
 
 | Path | Purpose |
 |------|---------|
-| `gauntlet/`, `gauntlet.yml` | 12 "zodiac room" attack-scenario stubs (`Room.verify`). |
+| `gauntlet/`, `gauntlet.yml` | 12 "zodiac room" attack-scenario detectors (`Room.verify`). |
 | `scripts/validate_gauntlet.py` | Gauntlet spec validator. |
-| `master_runner.py` | FastAPI server serving the dashboard + room health. |
-| `dashboard/index.html` | Static dashboard UI. |
+| `master_runner.py` | Orchestrator: 12 rooms + EVK core -> health report; optional FastAPI dashboard server. |
+| `dashboard/index.html` | Static dashboard UI (React/Tailwind, reads `/api/health`). |
 | `requirements.txt` | Python deps (`fastapi`, `uvicorn`). |
-| `mha_run.sh`, `gauntlet.yml` | Gauntlet runner / spec. |
+| `mha_run.sh` | Pipeline driver (exit 0=PURA, 1=MALPURA, 2=critical). |
+| `judge/cop_v1.py` | COP judge: PURA / MALPURA verdict. |
 
 > Note: the Python gauntlet harness is experimental and independent of the Rust crate.
-> `master_runner.py` currently references room modules by names that differ from the
-> files under `gauntlet/rooms/`, and the rooms expose `verify()` rather than the
-> `scan()` it calls; it is left as-is pending a decision on the intended interface.
+> It is not invoked by CI. The gauntlet rooms are rule-based demonstrations; no
+> detection-accuracy benchmarks are claimed.

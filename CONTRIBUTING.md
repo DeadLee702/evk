@@ -22,8 +22,8 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 - Keep changes focused and minimal.
 - Add or update tests for any behavior change. The `.evkp` round-trip is covered by
-  `tests/evkp_verify.rs` against `fixtures/sample.evkp`; regenerate the fixture with
-  `evk pack ...` if the bundle format changes.
+  `tests/evkp_verify.rs` (self-contained, generates bundles at runtime) and
+  `tests/comprehensive.rs` (26 integration tests).
 - Run `cargo fmt` before committing; do not introduce new `clippy` warnings.
 - Do not commit build artifacts (`/target`) or secrets.
 - Keep `Cargo.lock` committed so builds stay reproducible.

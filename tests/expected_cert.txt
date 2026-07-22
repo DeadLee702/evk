@@ -1,6 +1,0 @@
-EVK VERIFICATION CERTIFICATE
-Status: VALID
-Execution resolved within bundle scope.
-No unresolved references within bundle scope.
-No execution divergence detected.
-Result: CLOSED

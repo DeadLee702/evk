@@ -3,22 +3,22 @@
 ### Abstract
 Modern CI/CD guarantees tests pass. It does not guarantee artifacts are identical. ZIP compression, file order, and timestamps create byte-level drift. Same source + same compiler ≠ same artifact. For audits, compliance, and incident response, "close enough" fails.
 
-The **EVK Stack** solves this with the `.evkp` specification: a deterministic bundle format using canonical JSON, sorted file order, and SHA-256 verification — augmented by cryptographic signing and adversarial testing. Result: byte-for-byte reproducible, tamper-evident artifacts and 1-line verification. Same input → same hash, every time, on every machine.
+The **EVK Stack** solves this with the `.evkp` specification: a deterministic bundle format using canonical JSON, sorted file order, and SHA-256 verification. Result: byte-for-byte reproducible, tamper-evident artifacts and 1-line verification. Same input → same hash, every time, on every machine.
 
 **Core Repositories:**
 - [evk](https://github.com/DeadLee702/evk) — Deterministic packer and verifier
-- [gemini-box](https://github.com/DeadLee702/gemini-box) — Cryptographic signing layer (ed25519)
-- [adversarial-compliance-matrix](https://github.com/DeadLee702/adversarial-compliance-matrix) — Red-team failure mode simulation
+- [gemini-box](https://github.com/DeadLee702/gemini-box) — Cryptographic signing layer (ed25519) *(planned, not yet integrated)*
+- [adversarial-compliance-matrix](https://github.com/DeadLee702/adversarial-compliance-matrix) — Red-team failure mode simulation *(planned, not yet integrated)*
 
 ### 1. Executive Summary
 *The pain:* You ship `v1.2.3` to production. Months later an auditor asks: "Prove this exact bundle ran in prod." CI logs are gone. Rebuild produces a different hash. You're now explaining timestamps and compression levels instead of delivering proof.
 
-*The antidote:* The EVK Stack enforces deterministic primitives across three layers:
+*The antidote:* The EVK Stack enforces deterministic primitives:
 1. **Deterministic Bundling** (`evk`): Canonical manifest, sorted order, STORE-mode ZIP.
-2. **Cryptographic Signing** (`gemini-box`): ed25519 signatures for non-repudiation.
-3. **Adversarial Validation** (`adversarial-compliance-matrix`): Test against 12+ realistic attack/failure scenarios.
+2. **Cryptographic Signing** (`gemini-box`): ed25519 signatures for non-repudiation *(roadmap)*.
+3. **Adversarial Validation** (`adversarial-compliance-matrix`): Test against realistic attack/failure scenarios *(roadmap)*.
 
-*Outcome:* Auditors verify with confidence. Engineers ship with cryptographic proof. Compliance teams get tamper-evident, reproducible evidence bundles without heavy infrastructure.
+*Outcome:* Auditors verify with confidence. Engineers ship with proof. Compliance teams get tamper-evident, reproducible evidence bundles without heavy infrastructure.
 
 ### 2. The Challenge: The Reproducibility Gap
 CI/CD pipelines give green checkmarks but not identical artifacts.
@@ -43,34 +43,32 @@ EVK Packer (evk)
     ↓ (sort paths → hash files → canonical JSON manifest)
 ZIP Writer (STORE mode, fixed order)
     ↓
-Gemini-Box Signing
-    ↓
-Adversarial Matrix Testing
-    ↓
-data.evkp (signed)
+.evkp bundle
 ```
 
 **Key Properties:**
 - Manifest uses sorted keys, no whitespace drift.
 - File order is canonical.
 - Verification is fail-closed.
-- Signing provides non-repudiation.
-- Adversarial matrix ensures resilience.
+- `SOURCE_DATE_EPOCH` overrides the `created` timestamp for full reproducibility.
 
 ### 4. Case Study: Affidavit of Build
 **Scenario:** Production bundle `app_v1.2.3.evkp` deployed Jan 12, 2026. Auditor requests proof eight months later.
 
 **Verification (one command):**
 ```bash
-cargo test --test evkp_verify -- tests/fixtures/sample.evkp
+./target/release/evk verify --bundle app_v1.2.3.evkp --cert
 ```
 
 **Result:**
 ```
-test evkp_verify_manifest_and_hashes ... ok
-Result: VALID ✅
-Signature verified by gemini-box
-Adversarial matrix: All 12 scenarios passed
+{
+  "bundle": "app_v1.2.3.evkp",
+  "files_verified": 3,
+  "manifest_hash": "sha256:...",
+  "status": "VALID"
+}
+CERT: sha256:... VALID 3 files verified at 2026-...
 ```
 
 No CI logs or build servers required. The bundle itself carries the proof.
@@ -81,28 +79,23 @@ No CI logs or build servers required. The bundle itself carries the proof.
 - Tamper-evident chain of custody.
 
 ### 5. Architecture Overview
-- **evk**: Core library and CLI for packing/verifying `.evkp` files.
-- **gemini-box**: Adds ed25519 signing for authenticity.
-- **adversarial-compliance-matrix**: Simulates real-world failures (timestamp manipulation, order attacks, partial corruption, etc.).
-
-Together they form a complete, production-ready compliance toolkit.
+- **evk** (this repo): Core library and CLI for packing/verifying `.evkp` files. Includes a Merkle-style `Node` type for tamper localization and a Kill Vector runtime enforcement engine (C).
+- **gemini-box**: Adds ed25519 signing for authenticity *(roadmap)*.
+- **adversarial-compliance-matrix**: Simulates real-world failures *(roadmap)*.
 
 ### 6. Conclusion & Call to Action
-The EVK Stack turns "trust me" into verifiable math. Deterministic bundles + signing + adversarial testing deliver reproducible, auditable artifacts that stand the test of time.
+The EVK Stack turns "trust me" into verifiable math. Deterministic bundles deliver reproducible, auditable artifacts that stand the test of time.
 
 **For Auditors & Compliance:** Run the verifier. Get `VALID` or `INVALID`.
 **For Engineers:** Ship with proof built in.
-**For Security Teams:** Test resilience with the adversarial matrix.
+**For Security Teams:** Test resilience with the adversarial matrix *(roadmap)*.
 
 **Get Started:**
-1. Visit the repos:
-   - [evk](https://github.com/DeadLee702/evk)
-   - [gemini-box](https://github.com/DeadLee702/gemini-box)
-   - [adversarial-compliance-matrix](https://github.com/DeadLee702/adversarial-compliance-matrix)
-2. Run the demo verification tests.
-3. Integrate into your CI/CD pipeline.
+1. Clone: `git clone https://github.com/DeadLee702/evk`
+2. Build: `cargo build --release --locked`
+3. Verify: `./target/release/evk verify --bundle fixtures/sample.evkp --cert`
 
-*Open Source core available under MIT. Enterprise support and hosted verifier services available.*
+*Open Source core available under MIT.*
 
 ---
-_EVK Stack — Verifies file integrity and authenticity. Same bytes in = same verifiable outcome. © 2026 DeadLee702_
+_EVK Stack — Verifies file integrity. Same bytes in = same verifiable outcome. © 2026 DeadLee702_

@@ -25,8 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.github/workflows/ci.yml` (the previous path was never triggered) and modernized it
   (checkout@v4, `dtolnay/rust-toolchain`, cargo cache, `--locked`).
 - Rewrote `ARCHITECTURE.md` to match the actual CLI, binary name, and bundle format.
-- Removed committed `.evkp` fixtures. Tests now generate bundles at runtime.
-- `evkp_verify` test rewritten to be self-contained (no fixture dependency).
+- `evkp_verify` test rewritten to be self-contained (generates bundles at runtime,
+  no fixture dependency). `fixtures/sample.evkp` is kept for the README quick-start
+  example.
 
 ### Fixed
 - Cleared `cargo fmt` and `cargo clippy -D warnings` failures.
