@@ -6,13 +6,9 @@ All test fixtures are synthetically generated to represent real-world forensic a
 
 ### Fixture Generation
 
-```bash
-cargo run --bin gen_fixtures
-```
-
-Generates 13 test files in `test/`:
-- 12 incident files (one per incident type)
-- 1 clean anchor file (0x0000 = valid artifact)
+Tests generate `.evkp` bundles at runtime in a temp directory.
+See `tests/comprehensive.rs` and `tests/evkp_verify.rs` for `evk pack` usage.
+The only committed fixture required is `fixtures/nist-m57.json`.
 
 ### Test Dataset Composition
 
@@ -55,15 +51,11 @@ Each `.evkp` file is a binary artifact with:
 # Build the project
 cargo build --release
 
-# Generate fixtures
-cargo run --bin gen_fixtures
-
-# Run all 13 test cases
+# Run all tests
 cargo test --release -- --nocapture
 
-# Verify individual incidents
-./target/release/evk verify test/incident_7f3a.evkp
-./target/release/evk verify test/incident_clean.evkp
+# Verify a bundle
+./target/release/evk verify --bundle runtime_test.evkp
 ```
 
 ## What Each Test Validates

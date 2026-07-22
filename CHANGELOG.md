@@ -11,8 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Committed `Cargo.lock` for reproducible, `--locked` builds.
 - `.gitignore` for build artifacts and Python caches.
 - Unit tests for the `evk_lib` Merkle `Node` (`get_hash`, `find_mismatch`).
-- Real integration fixture `fixtures/sample.evkp`; the `evkp_verify` test now runs
-  (previously `#[ignore]`d).
 - Missing project docs: `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`,
   `ROADMAP.md`, `MASTER_MANIFEST.md`.
 - CI `fmt` + `clippy` quality gate.
@@ -27,10 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.github/workflows/ci.yml` (the previous path was never triggered) and modernized it
   (checkout@v4, `dtolnay/rust-toolchain`, cargo cache, `--locked`).
 - Rewrote `ARCHITECTURE.md` to match the actual CLI, binary name, and bundle format.
+- Removed committed `.evkp` fixtures. Tests now generate bundles at runtime.
+- `evkp_verify` test rewritten to be self-contained (no fixture dependency).
 
 ### Fixed
 - Cleared `cargo fmt` and `cargo clippy -D warnings` failures.
 - Removed unused-variable warnings in `src/lib.rs` and `src/bin/evk.rs`.
+- Fixed CI by pointing tests to `target/release/evk` binary.
 
 ## [1.0.0]
 

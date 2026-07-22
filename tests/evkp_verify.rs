@@ -1,54 +1,45 @@
-use sha2::{Digest, Sha256};
+use assert_cmd::prelude::*;
+use assert_fs::TempDir;
+use predicates::prelude::*;
 use std::fs;
-use std::io::Read;
-use zip::ZipArchive;
+use std::process::Command;
 
 #[test]
-fn evkp_verify_manifest_and_hashes() -> anyhow::Result<()> {
-    let evkp_path = "fixtures/sample.evkp"; // put a test bundle here
-    let zip_file = fs::File::open(evkp_path)?;
-    let mut zip = ZipArchive::new(zip_file)?;
+fn evkp_verify_manifest_and_hashes_runtime() -> Result<(), Box<dyn std::error::Error>> {
+    let temp = TempDir::new()?;
+    let job = temp.path().join("job.evk");
+    let snapshot = temp.path().join("snapshot.evk");
+    let input = temp.path().join("input.bin");
+    let evkp_path = temp.path().join("runtime_test.evkp");
 
-    // 1. Load manifest.json
-    let manifest_str = {
-        let mut manifest_file = zip.by_name("manifest.json")?;
-        let mut s = Vec::new();
-        manifest_file.read_to_end(&mut s)?;
-        String::from_utf8(s)?
-    }; // manifest_file dropped here, zip borrow ends
+    fs::write(&job, b"job payload")?;
+    fs::write(&snapshot, b"snapshot payload")?;
+    fs::write(&input, b"input payload")?;
 
-    let manifest: serde_json::Value = serde_json::from_str(&manifest_str)?;
+    let mut pack = Command::cargo_bin("evk")?;
+    pack.args([
+        "pack",
+        "--job",
+        job.to_str().unwrap(),
+        "--snapshot",
+        snapshot.to_str().unwrap(),
+        "--input",
+        input.to_str().unwrap(),
+        "--output",
+        evkp_path.to_str().unwrap(),
+    ])
+    .assert()
+    .success();
 
-    // 2. Verify manifest_hash
-    let mut manifest_no_hash = manifest.clone();
-    manifest_no_hash
-        .as_object_mut()
-        .unwrap()
-        .remove("manifest_hash");
-    let canonical = serde_json::to_string(&manifest_no_hash)?; // must match your canonical rules
-    let computed_hash = format!("sha256:{:x}", Sha256::digest(canonical.as_bytes()));
-    assert_eq!(
-        manifest["manifest_hash"], computed_hash,
-        "manifest_hash mismatch"
-    );
+    let mut verify = Command::cargo_bin("evk")?;
+    verify
+        .args(["verify", "--bundle"])
+        .arg(&evkp_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"status\": \"VALID\""))
+        .stdout(predicate::str::contains("\"files_verified\": 3"));
 
-    // 3. Verify each file hash in order
-    let files = manifest["files"].as_array().unwrap();
-    for entry in files {
-        let path = entry["path"].as_str().unwrap();
-        let expected_hash = entry["hash"].as_str().unwrap();
-
-        let mut file = zip.by_name(path)?;
-        let mut buf = Vec::new();
-        file.read_to_end(&mut buf)?;
-        let actual_hash = format!("sha256:{:x}", Sha256::digest(&buf));
-
-        assert_eq!(expected_hash, actual_hash, "hash mismatch for {}", path);
-    }
-
-    // 4. Verify order array matches files array
-    let order = manifest["order"].as_array().unwrap();
-    assert_eq!(order.len(), files.len(), "order length mismatch");
-
+    temp.close()?;
     Ok(())
 }
