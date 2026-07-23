@@ -271,6 +271,72 @@ def serve(host: str, port: int) -> int:
     def api_health():
         return JSONResponse(run_gauntlet())
 
+    @app.get("/api/swarm")
+    def api_swarm():
+        report = run_gauntlet(skip_evk=True)
+        return JSONResponse({
+            "platform": report["platform"],
+            "timestamp": report["timestamp"],
+            "total_rooms": report["total_rooms"],
+            "rooms_healthy": report["rooms_healthy"],
+            "rooms_failed": report["rooms_failed"],
+            "gauntlet_status": report["gauntlet_status"],
+            "swarm": [
+                {
+                    "room": r["room"],
+                    "zodiac": r["zodiac"],
+                    "status": r["status"],
+                    "attack_vector": r["attack_vector"],
+                    "benign_pass": r["benign_pass"],
+                    "malicious_blocked": r["malicious_blocked"],
+                }
+                for r in report["reports"]
+            ],
+        })
+
+    @app.get("/api/version")
+    def api_version():
+        return JSONResponse({
+            "platform": "Z-12 Sovereign Security Platform",
+            "version": "1.0.0",
+            "components": {
+                "evk": "1.0.0",
+                "gemini-box": "0.1.0",
+                "acm": "0.1.0",
+                "kill_vector": "1.0.0",
+            },
+            "rust_toolchain": "stable",
+            "build_mode": "release",
+        })
+
+    @app.get("/api/reports")
+    def api_reports():
+        report = run_gauntlet()
+        forensic_reports = []
+        for r in report["reports"]:
+            if r["status"] != "PURA":
+                forensic_reports.append({
+                    "room": r["room"],
+                    "zodiac": r["zodiac"],
+                    "status": r["status"],
+                    "attack_vector": r["attack_vector"],
+                    "signature": r["signature"],
+                    "benign_pass": r["benign_pass"],
+                    "malicious_blocked": r["malicious_blocked"],
+                    "last_check": r["last_check"],
+                    "enforcement_action": (
+                        "allow" if r["status"] == "PURA"
+                        else "warn" if r["status"] == "VIGLA"
+                        else "block"
+                    ),
+                })
+        return JSONResponse({
+            "timestamp": report["timestamp"],
+            "total_reports": len(forensic_reports),
+            "gauntlet_status": report["gauntlet_status"],
+            "reports": forensic_reports,
+        })
+
     if (dashboard_dir / "index.html").exists():
         app.mount("/static", StaticFiles(directory=str(dashboard_dir)), name="static")
 

@@ -77,6 +77,15 @@ pip install -r requirements.txt
 python master_runner.py --serve               # live dashboard at http://127.0.0.1:8000
 ```
 
+## Dashboard API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/health` | Full health report (12-room gauntlet + EVK core status) |
+| `GET /api/swarm` | Swarm report (per-room status, attack vectors, zodiac mapping) |
+| `GET /api/version` | Platform version + component versions |
+| `GET /api/reports` | Forensic reports (non-PURA incidents with enforcement actions) |
+
 ---
 
 ## Enforcement flow
