@@ -26,7 +26,6 @@ Usage:
     python master_runner.py --skip-evk      # skip the EVK Rust core check
     python master_runner.py --serve         # run FastAPI dashboard/API (needs fastapi+uvicorn)
 """
-from __future__ import annotations
 
 import argparse
 import json
@@ -36,6 +35,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
+
+import supabase_client as db
 
 from gauntlet import (  # noqa: F401  (imported for registry lookup)
     Oracle, Alighostest, Bridge, Perjanocyst, Trapzonar, Kitchzensync,
@@ -243,6 +244,9 @@ def cli(argv=None) -> int:
         return serve(args.host, args.port)
 
     report = run_gauntlet(skip_evk=args.skip_evk)
+    db.store_gauntlet_run(report)
+    db.store_audit_event("gauntlet", "DASHBOARD", "LOW" if report["gauntlet_status"] == "ZODIAKO_GARDAS" else "HIGH",
+                         "complete", report, f"Gauntlet run: {report['gauntlet_status']}")
     Path(args.report).write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))
     print(f"\n[MASTER] Report written to {args.report}")
@@ -337,12 +341,149 @@ def serve(host: str, port: int) -> int:
             "reports": forensic_reports,
         })
 
-    if (dashboard_dir / "index.html").exists():
+    from pydantic import BaseModel as _BM
+
+    class _ScanRequest(_BM):
+        artifact_path: str = ""
+
+    @app.get("/api/scans")
+    def api_scans():
+        """Return recent scans from Supabase, or empty list if unavailable."""
+        return JSONResponse({"scans": db.get_recent_scans(50)})
+
+    @app.post("/api/scan")
+    async def api_scan(req: _ScanRequest):
+        """Run an artifact through the full pipeline: ACM verify + Gemini-Box analyze.
+
+        Accepts JSON body: {"artifact_path": "test/incident_7f3a.evkp"}
+        """
+        artifact_path = req.artifact_path
+        if not artifact_path:
+            return JSONResponse({"error": "artifact_path required"}, status_code=400)
+
+        p = Path(artifact_path)
+        if not p.exists():
+            return JSONResponse({"error": f"file not found: {artifact_path}"}, status_code=404)
+
+        acm_bin = REPO_ROOT.parent / "adversarial-compliance-matrix" / "target" / "release" / "evk"
+        acm_result = None
+        if acm_bin.exists():
+            try:
+                proc = subprocess.run(
+                    [str(acm_bin), "verify", str(p), "--json"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if proc.returncode in (0, 1):
+                    acm_result = json.loads(proc.stdout)
+            except Exception:
+                pass
+
+        analyze_bin = REPO_ROOT.parent / "gemini-box" / "target" / "release" / "analyze"
+        gemini_result = None
+        if analyze_bin.exists():
+            try:
+                proc = subprocess.run(
+                    [str(analyze_bin), str(p)],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if proc.returncode == 0:
+                    gemini_result = json.loads(proc.stdout)
+            except Exception:
+                pass
+
+        report = {
+            "artifact_path": artifact_path,
+            "artifact_name": p.name,
+            "acm": acm_result,
+            "gemini_box": gemini_result,
+            "timestamp": _now(),
+        }
+
+        if acm_result:
+            db.store_scan(
+                artifact_name=p.name,
+                status_code=acm_result.get("status_code", ""),
+                verdict=acm_result.get("verdict", ""),
+                incident_type=acm_result.get("incident_type", ""),
+                severity=acm_result.get("severity", ""),
+                enforcement_action=acm_result.get("enforcement_action", ""),
+                confidence=acm_result.get("confidence", 0.0),
+                report=report,
+            )
+            db.store_audit_event(
+                "scan", "ACM", acm_result.get("severity", "LOW"),
+                acm_result.get("enforcement_action", "allow"),
+                report, f"Scan of {p.name}: {acm_result.get('verdict', 'UNKNOWN')}",
+            )
+
+        return JSONResponse(report)
+
+    @app.post("/api/pipeline/run")
+    async def api_pipeline_run():
+        """Run the full Z-12 pipeline end-to-end: gauntlet + EVK core + enforcement check."""
+        report = run_gauntlet()
+        db.store_gauntlet_run(report)
+        db.store_audit_event(
+            "gauntlet", "DASHBOARD",
+            "LOW" if report["gauntlet_status"] == "ZODIAKO_GARDAS" else "HIGH",
+            "pipeline_run", report,
+            f"Pipeline run: {report['gauntlet_status']}",
+        )
+        return JSONResponse(report)
+
+    _COMPONENT_DEFS = [
+        {"name": "EVK", "version": "1.0.0", "bin": "target/release/evk"},
+        {"name": "Gemini-Box", "version": "0.1.0", "bin": None},
+        {"name": "ACM", "version": "0.1.0", "bin": None},
+        {"name": "Kill-Vector", "version": "1.0.0", "bin": None},
+    ]
+
+    @app.get("/api/components")
+    def api_components():
+        """Return status of all Z-12 platform components."""
+        components = []
+        for comp in _COMPONENT_DEFS:
+            status = "OPERATIONAL"
+            if comp["bin"]:
+                bin_path = REPO_ROOT / comp["bin"]
+                status = "OPERATIONAL" if bin_path.exists() else "OFFLINE"
+            components.append({
+                "name": comp["name"],
+                "version": comp["version"],
+                "status": status,
+                "build_mode": "release",
+                "last_check": _now(),
+            })
+        return JSONResponse({"components": components})
+
+    @app.get("/api/audit")
+    def api_audit():
+        """Return recent audit events from Supabase."""
+        return JSONResponse({"events": db.get_recent_audit_events(50)})
+
+    @app.get("/api/gauntlet/history")
+    def api_gauntlet_history():
+        """Return recent gauntlet runs from Supabase."""
+        return JSONResponse({"runs": db.get_recent_gauntlet_runs(20)})
+
+    # Prefer built Vite bundle (dashboard/dist/), fall back to source dashboard/
+    dist_dir = dashboard_dir / "dist"
+    serve_dir = dist_dir if (dist_dir / "index.html").exists() else dashboard_dir
+
+    if (serve_dir / "index.html").exists():
+        app.mount("/assets", StaticFiles(directory=str(serve_dir / "assets")), name="assets")
         app.mount("/static", StaticFiles(directory=str(dashboard_dir)), name="static")
 
         @app.get("/")
         def index():
-            return FileResponse(str(dashboard_dir / "index.html"))
+            return FileResponse(str(serve_dir / "index.html"))
+
+        @app.get("/{full_path:path}")
+        def catch_all(full_path: str):
+            """SPA fallback — serve index.html for any non-API route."""
+            if full_path.startswith("api/"):
+                return JSONResponse({"error": "not found"}, status_code=404)
+            return FileResponse(str(serve_dir / "index.html"))
 
     uvicorn.run(app, host=host, port=port)
     return 0
