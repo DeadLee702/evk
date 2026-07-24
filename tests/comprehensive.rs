@@ -2,7 +2,7 @@ use evk_lib::{internal_hash, Node};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use zip::ZipArchive;
 
 // ─── Merkle tree unit tests ───────────────────────────────────────────
@@ -174,7 +174,7 @@ impl Drop for TempDir {
     }
 }
 
-fn write_file(path: &PathBuf, content: &[u8]) {
+fn write_file(path: &Path, content: &[u8]) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap();
     }
@@ -219,7 +219,7 @@ fn create_bundle(tmp: &TempDir) -> PathBuf {
     output
 }
 
-fn open_zip(path: &PathBuf) -> ZipArchive<std::fs::File> {
+fn open_zip(path: &Path) -> ZipArchive<std::fs::File> {
     let file = fs::File::open(path).unwrap();
     ZipArchive::new(file).unwrap()
 }
@@ -380,7 +380,7 @@ fn pack_is_deterministic_with_source_date_epoch() {
     let out1 = tmp.join("bundle1.evkp");
     let out2 = tmp.join("bundle2.evkp");
 
-    let run = |output: &PathBuf| {
+    let run = |output: &Path| {
         std::process::Command::new(cargo_bin("evk"))
             .args([
                 "pack",
