@@ -5,6 +5,7 @@ import { ComponentPanel } from "./components/ComponentPanel";
 import { RoomGrid } from "./components/RoomGrid";
 import { ScanPanel } from "./components/ScanPanel";
 import { AuditLog } from "./components/AuditLog";
+import { PendingEnforcement } from "./components/PendingEnforcement";
 import { Footer } from "./components/Footer";
 
 export function App() {
@@ -14,6 +15,7 @@ export function App() {
     scans,
     audit,
     version,
+    enforcement,
     loading,
     error,
     lastUpdate,
@@ -61,6 +63,13 @@ export function App() {
           <div className="space-y-6">
             <ScanPanel scans={scans} onScan={scanArtifact} />
           </div>
+        </div>
+
+        <div className="mb-6">
+          <PendingEnforcement
+            actions={enforcement}
+            onDecided={refresh}
+          />
         </div>
 
         <div className="mb-6">

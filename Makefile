@@ -21,9 +21,12 @@ TEST_BIN := test_killswitch_runner
 REAPER_SRC := src/sensors/pike_reaper/reaper/src/main.c
 REAPER_BIN := pike_reaper
 
-.PHONY: all test_killswitch reaper clean
+KV_ENFORCE_SRC := src/kill_vector/kv_enforce.c
+KV_ENFORCE_BIN := kv_enforce
 
-all: $(KV_OBJ) $(REAPER_BIN)
+.PHONY: all test_killswitch reaper kv_enforce clean
+
+all: $(KV_OBJ) $(REAPER_BIN) $(KV_ENFORCE_BIN)
 
 $(KV_OBJ): $(KV_SRC) $(KV_HDR)
 	$(CC) $(CFLAGS) -c $(KV_SRC) -o $(KV_OBJ)
@@ -38,5 +41,10 @@ $(REAPER_BIN): $(REAPER_SRC) $(KV_OBJ)
 
 reaper: $(REAPER_BIN)
 
+$(KV_ENFORCE_BIN): $(KV_ENFORCE_SRC) $(KV_OBJ) $(KV_HDR)
+	$(CC) $(CFLAGS) $(KV_ENFORCE_SRC) $(KV_OBJ) -o $(KV_ENFORCE_BIN)
+
+kv_enforce: $(KV_ENFORCE_BIN)
+
 clean:
-	rm -f $(KV_OBJ) $(TEST_BIN) $(REAPER_BIN)
+	rm -f $(KV_OBJ) $(TEST_BIN) $(REAPER_BIN) $(KV_ENFORCE_BIN)

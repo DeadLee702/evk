@@ -108,3 +108,19 @@ export const ZODIAC_ICONS: Record<string, string> = {
   Aquarius: "\u2652",
   Pisces: "\u2653",
 };
+
+
+export interface EnforcementAction {
+  id: string;
+  pid: number;
+  reason: string;
+  lineage?: string;
+  status: "PENDING" | "APPROVED" | "DENIED" | "HOLD" | "EXECUTED" | "REFUSED";
+  created_at: string;
+  decided_at: string | null;
+  decided_by: string | null;
+}
+
+export interface EnforcementPendingResponse {
+  requests: EnforcementAction[];
+}

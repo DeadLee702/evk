@@ -31,6 +31,7 @@ import argparse
 import json
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -257,6 +258,35 @@ def cli(argv=None) -> int:
     return 0 if report["gauntlet_status"] == "ZODIAKO_GARDAS" else 1
 
 
+
+# ---------------------------------------------------------------------------
+# In-process enforcement queue (human-in-the-loop)
+# ---------------------------------------------------------------------------
+_ENFORCEMENT_QUEUE: list[dict] = []
+_KV_ENFORCE_BIN = REPO_ROOT / "kv_enforce"
+_KV_MIN_SAFE_PID = 2
+
+
+def _new_enforcement_request(pid: int, reason: str, lineage: str) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "pid": pid,
+        "reason": reason,
+        "lineage": lineage,
+        "status": "PENDING",
+        "created_at": _now(),
+        "decided_at": None,
+        "decided_by": None,
+    }
+
+
+def _find_request(req_id: str) -> dict | None:
+    """Find an enforcement request by ID in the in-process queue."""
+    for entry in _ENFORCEMENT_QUEUE:
+        if entry["id"] == req_id:
+            return entry
+    return None
+
 def serve(host: str, port: int) -> int:
     """Optional live control plane. Requires fastapi + uvicorn."""
     try:
@@ -468,6 +498,136 @@ def serve(host: str, port: int) -> int:
 
     # Prefer built Vite bundle (dashboard/dist/), fall back to source dashboard/
     dist_dir = dashboard_dir / "dist"
+
+    # ------------------------------------------------------------------
+    # Enforcement queue endpoints (human-in-the-loop)
+    # ------------------------------------------------------------------
+
+    @app.post("/api/enforcement/request")
+    def enforcement_request(req: Request):
+        """Create a PENDING enforcement request. NEVER enforces."""
+        try:
+            body = json.loads(req.body or b"{}")
+        except Exception:
+            body = {}
+        pid = int(body.get("pid", 0))
+        reason = str(body.get("reason", "UNSPECIFIED"))
+        lineage = str(body.get("lineage", ""))
+
+        if pid < _KV_MIN_SAFE_PID:
+            entry = _new_enforcement_request(pid, reason, lineage)
+            entry["status"] = "REFUSED"
+            entry["decided_at"] = _now()
+            entry["decided_by"] = "SYSTEM"
+            _ENFORCEMENT_QUEUE.append(entry)
+            db.store_audit_event(
+                "enforcement", "KILL_VECTOR", "HIGH",
+                "REFUSED", f"Unsafe PID {pid} rejected at request time")
+            db.store_enforcement_request(entry)
+            return JSONResponse(entry, status_code=200)
+
+        entry = _new_enforcement_request(pid, reason, lineage)
+        _ENFORCEMENT_QUEUE.append(entry)
+        db.store_enforcement_request(entry)
+        db.store_audit_event(
+            "enforcement", "KILL_VECTOR", "MEDIUM",
+            "PENDING", f"Enforcement request queued for PID {pid}: {reason}")
+        return JSONResponse(entry, status_code=200)
+
+    @app.get("/api/enforcement/pending")
+    def enforcement_pending():
+        """Return PENDING and recently-decided requests for the dashboard."""
+        recent = [
+            e for e in _ENFORCEMENT_QUEUE
+            if e["status"] in ("PENDING", "APPROVED", "DENIED", "HOLD", "EXECUTED", "REFUSED")
+        ][-50:]
+        return JSONResponse({"requests": recent})
+
+    @app.post("/api/enforcement/{req_id}/approve")
+    def enforcement_approve(req_id: str):
+        """Transition PENDING -> EXECUTED by invoking the C enforcer.
+        This is the ONLY endpoint that calls the Kill Vector."""
+        entry = _find_request(req_id)
+        if entry is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        if entry["status"] != "PENDING":
+            return JSONResponse(
+                {"error": f"request is {entry['status']}, not PENDING"},
+                status_code=409)
+
+        pid = entry["pid"]
+        if pid < _KV_MIN_SAFE_PID:
+            entry["status"] = "REFUSED"
+            entry["decided_at"] = _now()
+            entry["decided_by"] = "HUMAN"
+            db.update_enforcement_status(req_id, "REFUSED", "HUMAN")
+            db.store_audit_event(
+                "enforcement", "KILL_VECTOR", "HIGH",
+                "REFUSED", f"Approve refused: unsafe PID {pid}")
+            return JSONResponse(entry)
+
+        # Invoke the C enforcer via subprocess
+        if _KV_ENFORCE_BIN.exists():
+            try:
+                result = subprocess.run(
+                    [str(_KV_ENFORCE_BIN), str(pid), entry["reason"]],
+                    capture_output=True, timeout=10)
+                enforced = (result.returncode == 0)
+            except Exception:
+                enforced = False
+        else:
+            # Enforcer binary not built -- degrade gracefully
+            enforced = False
+
+        entry["status"] = "EXECUTED" if enforced else "REFUSED"
+        entry["decided_at"] = _now()
+        entry["decided_by"] = "HUMAN"
+        action = "SIGKILL" if enforced else "REFUSED"
+        severity = "CRITICAL" if enforced else "HIGH"
+        db.update_enforcement_status(req_id, entry["status"], "HUMAN")
+        db.store_audit_event(
+            "enforcement", "KILL_VECTOR", severity, action,
+            f"PID {pid} {'killed' if enforced else 'refused (enforcer unavailable)'}: {entry['reason']}")
+        return JSONResponse(entry)
+
+    @app.post("/api/enforcement/{req_id}/deny")
+    def enforcement_deny(req_id: str):
+        """Transition to DENIED. No enforcement."""
+        entry = _find_request(req_id)
+        if entry is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        if entry["status"] != "PENDING":
+            return JSONResponse(
+                {"error": f"request is {entry['status']}, not PENDING"},
+                status_code=409)
+        entry["status"] = "DENIED"
+        entry["decided_at"] = _now()
+        entry["decided_by"] = "HUMAN"
+        db.update_enforcement_status(req_id, "DENIED", "HUMAN")
+        db.store_audit_event(
+            "enforcement", "KILL_VECTOR", "LOW",
+            "DENIED", f"Enforcement denied for PID {entry['pid']}: {entry['reason']}")
+        return JSONResponse(entry)
+
+    @app.post("/api/enforcement/{req_id}/hold")
+    def enforcement_hold(req_id: str):
+        """Transition to HOLD (Adaptive Hold). No enforcement."""
+        entry = _find_request(req_id)
+        if entry is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        if entry["status"] != "PENDING":
+            return JSONResponse(
+                {"error": f"request is {entry['status']}, not PENDING"},
+                status_code=409)
+        entry["status"] = "HOLD"
+        entry["decided_at"] = _now()
+        entry["decided_by"] = "HUMAN"
+        db.update_enforcement_status(req_id, "HOLD", "HUMAN")
+        db.store_audit_event(
+            "enforcement", "KILL_VECTOR", "MEDIUM",
+            "HOLD", f"Enforcement held for PID {entry['pid']}: {entry['reason']}")
+        return JSONResponse(entry)
+
     serve_dir = dist_dir if (dist_dir / "index.html").exists() else dashboard_dir
 
     if (serve_dir / "index.html").exists():

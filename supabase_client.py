@@ -121,3 +121,45 @@ def get_recent_gauntlet_runs(limit: int = 10) -> list[dict[str, Any]]:
 def get_recent_audit_events(limit: int = 50) -> list[dict[str, Any]]:
     """Fetch recent audit events from Supabase."""
     return _get("z12_audit_log", f"order=created_at.desc&limit={limit}")
+
+
+def store_enforcement_request(req: dict[str, Any]) -> dict[str, Any] | None:
+    """Persist an enforcement request to the z12_enforcement_requests table."""
+    return _post("z12_enforcement_requests", {
+        "request_id": req.get("id"),
+        "pid": req.get("pid"),
+        "reason": req.get("reason"),
+        "lineage": req.get("lineage"),
+        "status": req.get("status"),
+        "decided_by": req.get("decided_by"),
+    })
+
+
+def update_enforcement_status(request_id: str, status: str,
+                               decided_by: str = "") -> dict[str, Any] | None:
+    """Update an enforcement request status via the REST API (PATCH)."""
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        return None
+    import urllib.request
+    import urllib.error
+
+    url = f"{SUPABASE_URL}/rest/v1/z12_enforcement_requests?request_id=eq.{request_id}"
+    headers = {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+    payload = json.dumps({"status": status, "decided_by": decided_by}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers=headers, method="PATCH")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8")
+            return json.loads(body) if body else None
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError):
+        return None
+
+
+def get_enforcement_requests(limit: int = 50) -> list[dict[str, Any]]:
+    """Fetch enforcement requests from Supabase."""
+    return _get("z12_enforcement_requests", f"order=created_at.desc&limit={limit}")

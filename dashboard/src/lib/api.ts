@@ -5,6 +5,8 @@ import type {
   AuditEvent,
   VersionInfo,
   ScanResult,
+  EnforcementAction,
+  EnforcementPendingResponse,
 } from "../types";
 
 const BASE = "";
@@ -40,4 +42,23 @@ export const api = {
     }),
   runPipeline: () =>
     fetchJson<GauntletReport>("/api/pipeline/run", { method: "POST" }),
+  enforcementPending: () =>
+    fetchJson<EnforcementPendingResponse>("/api/enforcement/pending"),
+  enforcementApprove: (id: string) =>
+    fetchJson<EnforcementAction>(`/api/enforcement/${id}/approve`, {
+      method: "POST",
+    }),
+  enforcementDeny: (id: string) =>
+    fetchJson<EnforcementAction>(`/api/enforcement/${id}/deny`, {
+      method: "POST",
+    }),
+  enforcementHold: (id: string) =>
+    fetchJson<EnforcementAction>(`/api/enforcement/${id}/hold`, {
+      method: "POST",
+    }),
+  enforcementDecide: (id: string, decision: "approve" | "deny" | "hold") => {
+    if (decision === "approve") return api.enforcementApprove(id);
+    if (decision === "deny") return api.enforcementDeny(id);
+    return api.enforcementHold(id);
+  },
 };

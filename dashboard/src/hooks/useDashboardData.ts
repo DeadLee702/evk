@@ -6,6 +6,7 @@ import type {
   ScanRecord,
   AuditEvent,
   VersionInfo,
+  EnforcementAction,
 } from "../types";
 
 interface DashboardData {
@@ -14,6 +15,7 @@ interface DashboardData {
   scans: ScanRecord[];
   audit: AuditEvent[];
   version: VersionInfo | null;
+  enforcement: EnforcementAction[];
   loading: boolean;
   error: string | null;
   lastUpdate: Date | null;
@@ -26,6 +28,7 @@ export function useDashboardData(refreshMs: number = 30000) {
     scans: [],
     audit: [],
     version: null,
+    enforcement: [],
     loading: true,
     error: null,
     lastUpdate: null,
@@ -34,12 +37,13 @@ export function useDashboardData(refreshMs: number = 30000) {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [health, components, scans, audit, version] = await Promise.all([
+      const [health, components, scans, audit, version, enforcement] = await Promise.all([
         api.health().catch(() => null),
         api.components().catch(() => ({ components: [] })),
         api.scans().catch(() => ({ scans: [] })),
         api.audit().catch(() => ({ events: [] })),
         api.version().catch(() => null),
+        api.enforcementPending().catch(() => ({ requests: [] })),
       ]);
 
       if (!mountedRef.current) return;
@@ -50,6 +54,7 @@ export function useDashboardData(refreshMs: number = 30000) {
         scans: (scans as { scans: ScanRecord[] }).scans || [],
         audit: (audit as { events: AuditEvent[] }).events || [],
         version,
+        enforcement: (enforcement as { requests: EnforcementAction[] }).requests || [],
         loading: false,
         error: null,
         lastUpdate: new Date(),
