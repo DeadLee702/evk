@@ -6,9 +6,9 @@
 
 ## Why Z-12 Exists
 
-Modern software systems increasingly rely on autonomous services, AI agents, automation pipelines, and distributed infrastructure to make decisions in real time. As these systems become more capable, the consequences of executing unverified actions become significantly greater.
+Modern software systems increasingly rely on autonomous services, AI agents, automation pipelines, and distributed infrastructure to make decisions in real time. As these systems become more capable they also expand the attack surface, and traditional reactive security approaches are no longer sufficient.
 
-Traditional security solutions often focus on observing events after they occur or responding once an incident has already happened. Z-12 approaches the problem differently: instead of assuming execution should proceed unless something appears suspicious, Z-12 establishes multiple layers of verification before, during, and after runtime.
+Traditional security solutions often focus on observing events after they occur or responding once an incident has already happened. Z-12 approaches the problem differently: instead of assuming execution is trustworthy, we verify and enforce trust before and during runtime.
 
 **Verify trust before execution. Continuously validate runtime behavior. Enforce policy when required.**
 
@@ -42,6 +42,8 @@ evk/
 ├── judge/cop_v1.py             # COP judge: PURA / MALPURA verdict
 ├── mha_run.sh                  # pipeline driver (exit 0=PURA, 1=MALPURA, 2=critical)
 ├── dashboard/index.html        # React/Tailwind control plane (reads /api/health)
+├── z12                        # Python integration CLI (integration-only orchestrator)
+├── run_z12_pipeline.sh        # Deterministic demo driver (Bash)
 └── Makefile                    # builds the C Kill Vector subsystem
 ```
 
@@ -77,6 +79,39 @@ pip install -r requirements.txt
 python master_runner.py --serve               # live dashboard at http://127.0.0.1:8000
 ```
 
+---
+
+## Z-12 Integration & Demo (z12)
+
+We provide a lightweight orchestration layer and deterministic demo runner that builds and exercises the full Z-12 platform (EVK, Gemini-Box, Adversarial Compliance Matrix) and produces machine- and human-readable reports.
+
+Files added for integration:
+- `z12` — Python orchestration CLI (integration-only). Usage: `./z12 demo` (requires python3).
+- `run_z12_pipeline.sh` — Deterministic Bash demo driver. Usage: `./run_z12_pipeline.sh`.
+
+Quick demo (sibling repo layout)
+1. Ensure the three repositories are siblings:
+   - `../evk`
+   - `../gemini-box`
+   - `../adversarial-compliance-matrix`
+2. Make scripts executable:
+   - `chmod +x ./z12 ./run_z12_pipeline.sh`
+3. Run a deterministic demo against the fixture `test/incident_7f3a.evkp`:
+   - `./run_z12_pipeline.sh`
+   - or `./z12 demo`
+4. Outputs:
+   - `z12_demo_report.json` / `z12_demo_report.html` / `z12_demo_evidence.html` (printable)
+
+Environment overrides (if repos are not siblings):
+- `Z12_EVK_PATH` — path to EVK
+- `Z12_GEMINI_PATH` — path to Gemini-Box
+- `Z12_ACM_PATH` — path to Adversarial Compliance Matrix
+- `FIXTURE_PATH` — override fixture location
+
+Safety: the Kill Vector runtime enforces SIGKILL for denied processes. Running the enforcement test (`make test_killswitch`) requires a C toolchain and should be executed only on isolated test hosts (`./run_z12_pipeline.sh --run-kill-vector-test`).
+
+---
+
 ## Dashboard API Endpoints
 
 | Endpoint | Description |
@@ -96,6 +131,25 @@ Pike sensor ─▶ runtime event ─▶ ACM decision ─▶ ACM_DENY ─▶ Kill
 
 `handle_acm_decision()` in `src/sensors/pike_reaper/reaper/src/main.c` is the
 concrete integration point (tested via `make test_killswitch`).
+
+---
+
+## Hackathon demo (judge-friendly)
+
+Problem: autonomous systems lack deterministic runtime integrity and enforcement.
+
+Solution: Z-12 unifies deterministic verification (EVK), hardened signing/triage (Gemini-Box), and a compliance verdict engine (ACM) with deterministic, auditable evidence and enforcement.
+
+How to demo (60–90 seconds):
+- Run `./run_z12_pipeline.sh` (or `./z12 demo`).
+- Open `z12_demo_report.html` and `z12_demo_evidence.html` in a browser — these are demo‑ready artefacts you can hand to judges.
+- Point judges to the `summary` block in the JSON report (`z12_demo_report.json`) for machine-verifiable proof.
+
+Judges quick checklist:
+- [ ] Clone the three repositories as siblings (evk, gemini-box, adversarial-compliance-matrix)
+- [ ] Ensure Rust toolchain and Python3 are installed
+- [ ] `chmod +x ./run_z12_pipeline.sh` then `./run_z12_pipeline.sh`
+- [ ] Open `z12_demo_report.html` and `z12_demo_evidence.html` to inspect results
 
 ---
 
