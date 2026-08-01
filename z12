@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+"""
+Z-12 integration CLI (z12)
+
+Usage:
+  ./z12 demo [--run-kill-vector-test]
+
+This script discovers the three repositories (EVK, Gemini-Box, Adversarial Compliance Matrix)
+and runs the demo orchestration:
+  - cargo build --release for each repo
+  - run EVK verify on a fixture
+  - run Gemini-Box analyze on the same fixture
+  - run ACM verify on the result
+
+Outputs:
+  - report.json
+  - report.html
+  - evidence.html (PDF-printable)
+
+Environment overrides:
+  Z12_EVK_PATH
+  Z12_GEMINI_PATH
+  Z12_ACM_PATH
+
+"""
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+REPO_DEFAULT_PARENT = ROOT.parent
+
+# Default sibling paths
+DEFAULT_EVK = REPO_DEFAULT_PARENT / "evk"
+DEFAULT_GEMINI = REPO_DEFAULT_PARENT / "gemini-box"
+DEFAULT_ACM = REPO_DEFAULT_PARENT / "adversarial-compliance-matrix"
+
+REPORT_JSON = ROOT / "z12_report.json"
+REPORT_HTML = ROOT / "z12_report.html"
+EVIDENCE_HTML = ROOT / "z12_evidence.html"
+
+
+class StageResult:
+    def __init__(self, name):
+        self.name = name
+        self.pass_status = False
+        self.output = ""
+        self.error = ""
+        self.timestamp = datetime.utcnow().isoformat() + "Z"
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "pass": self.pass_status,
+            "output": self.output,
+            "error": self.error,
+            "timestamp": self.timestamp,
+        }
+
+
+def run_cmd(cmd, cwd=None, timeout=300):
+    try:
+        p = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False, text=True)
+        return p.returncode, p.stdout, p.stderr
+    except subprocess.TimeoutExpired as e:
+        return 124, "", f"Timeout: {e}"
+
+
+def discover_paths():
+    evk = Path(os.environ.get("Z12_EVK_PATH", DEFAULT_EVK))
+    gemini = Path(os.environ.get("Z12_GEMINI_PATH", DEFAULT_GEMINI))
+    acm = Path(os.environ.get("Z12_ACM_PATH", DEFAULT_ACM))
+    return evk, gemini, acm
+
+
+def cargo_build(repo_path: Path):
+    return run_cmd(["cargo", "build", "--release"], cwd=repo_path)
+
+
+def cargo_test(repo_path: Path):
+    return run_cmd(["cargo", "test", "--release"], cwd=repo_path)
+
+
+def ensure_binaries(repo_path: Path, bins):
+    target = repo_path / "target" / "release"
+    res = {}
+    for b in bins:
+        p = target / b
+        res[b] = p
+    return res
+
+
+def write_json_report(report, path=REPORT_JSON):
+    with open(path, "w") as f:
+        json.dump(report, f, indent=2)
+
+
+def render_html(report, path=REPORT_HTML):
+    status_lines = []
+    for stage in report["stages"]:
+        status = "PASS" if stage["pass"] else "FAIL"
+        status_lines.append(f"<tr><td>{stage['name']}</td><td>{status}</td><td><pre>{escape_html(stage['output'])}</pre></td><td><pre>{escape_html(stage['error'])}</pre></td></tr>")
+
+    html = f"""
+<html>
+<head><meta charset="utf-8"><title>Z-12 Report</title>
+<style>body{{font-family: Arial, sans-serif}}table{{width:100%;border-collapse:collapse}}td,th{{border:1px solid #ddd;padding:8px}}th{{background:#f4f4f4}}</style>
+</head>
+<body>
+<h1>Z-12 PLATFORM STATUS</h1>
+<table>
+<tr><th>Component</th><th>Status</th><th>Output</th><th>Error</th></tr>
+{''.join(status_lines)}
+</table>
+<p>Generated at {datetime.utcnow().isoformat()}Z</p>
+</body>
+</html>
+"""
+    with open(path, "w") as f:
+        f.write(html)
+
+
+def render_evidence_html(report, path=EVIDENCE_HTML):
+    # Simpler printable layout
+    items = []
+    for stage in report["stages"]:
+        status = "PASS" if stage["pass"] else "FAIL"
+        items.append(f"<h2>{stage['name']}: {status}</h2><h3>Output</h3><pre>{escape_html(stage['output'])}</pre><h3>Error</h3><pre>{escape_html(stage['error'])}</pre>")
+
+    html = f"""
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Z-12 Evidence Report</title>
+<style>body{{font-family: Helvetica, Arial, sans-serif; margin: 24px}}pre{{background:#f7f7f7;padding:12px;border:1px solid #eee;overflow:auto}}</style>
+</head>
+<body>
+<h1>Z-12 EVIDENCE REPORT</h1>
+<p>Generated at {datetime.utcnow().isoformat()}Z</p>
+{''.join(items)}
+</body>
+</html>
+"""
+    with open(path, "w") as f:
+        f.write(html)
+
+
+def escape_html(s):
+    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def run_demo(run_kill_vector_test=False):
+    evk_p, gemini_p, acm_p = discover_paths()
+
+    report = {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "evk_path": str(evk_p),
+        "gemini_path": str(gemini_p),
+        "acm_path": str(acm_p),
+        "stages": [],
+    }
+
+    # Stage 1: Build EVK
+    s_evk_build = StageResult("EVK: cargo build")
+    if not evk_p.exists():
+        s_evk_build.error = f"EVK path not found: {evk_p}"
+    else:
+        code, out, err = cargo_build(evk_p)
+        s_evk_build.output = out
+        s_evk_build.error = err
+        s_evk_build.pass_status = (code == 0)
+    report["stages"].append(s_evk_build.to_dict())
+
+    # Optionally run make test_killswitch
+    if run_kill_vector_test:
+        s_kv = StageResult("EVK: make test_killswitch")
+        if not evk_p.exists():
+            s_kv.error = f"EVK path not found: {evk_p}"
+        else:
+            code, out, err = run_cmd(["make", "test_killswitch"], cwd=evk_p)
+            s_kv.output = out
+            s_kv.error = err
+            s_kv.pass_status = (code == 0)
+        report["stages"].append(s_kv.to_dict())
+
+    # Stage 2: Build Gemini-Box
+    s_g_build = StageResult("GEMINI-BOX: cargo build")
+    if not gemini_p.exists():
+        s_g_build.error = f"GEMINI-BOX path not found: {gemini_p}"
+    else:
+        code, out, err = cargo_build(gemini_p)
+        s_g_build.output = out
+        s_g_build.error = err
+        s_g_build.pass_status = (code == 0)
+    report["stages"].append(s_g_build.to_dict())
+
+    # Stage 3: Build ACM
+    s_a_build = StageResult("ACM: cargo build")
+    if not acm_p.exists():
+        s_a_build.error = f"ACM path not found: {acm_p}"
+    else:
+        code, out, err = cargo_build(acm_p)
+        s_a_build.output = out
+        s_a_build.error = err
+        s_a_build.pass_status = (code == 0)
+    report["stages"].append(s_a_build.to_dict())
+
+    # Stage 4: Generate/locate fixture
+    fixture = evk_p / "fixtures" / "sample.evkp"
+    if not fixture.exists():
+        # try to generate via gemini-box/gen_fixtures or in-repo fallback
+        gen_bin = gemini_p / "target" / "release" / "gen_fixtures"
+        gen_bin_alt = evk_p / "target" / "release" / "gen_fixtures"
+        s_fixture = StageResult("Fixture: generate job.evk.zip + job.evk via gen_fixtures")
+        if gen_bin.exists():
+            code, out, err = run_cmd([str(gen_bin)], cwd=gemini_p)
+            s_fixture.output = out
+            s_fixture.error = err
+            s_fixture.pass_status = (code == 0)
+            report["stages"].append(s_fixture.to_dict())
+            # move job.evk.zip into fixture path
+            zip_path = gemini_p / "job.evk.zip"
+            if zip_path.exists():
+                # extract job.evk into evk/fixtures/sample.evkp
+                try:
+                    import zipfile
+                    with zipfile.ZipFile(zip_path, 'r') as z:
+                        names = z.namelist()
+                        if "job.evk" in names:
+                            evk_p.joinpath("fixtures").mkdir(parents=True, exist_ok=True)
+                            z.extract("job.evk", path=evk_p / "fixtures")
+                            evk_p.joinpath("fixtures", "job.evk").rename(fixture)
+                except Exception as e:
+                    s_fixture.error += f"\nExtract error: {e}"
+        else:
+            s_fixture.error = f"gen_fixtures binary not found at {gen_bin}"
+            s_fixture.pass_status = False
+            report["stages"].append(s_fixture.to_dict())
+
+    # If fixture still missing, try test/job.evk in gemini or evk
+    if not fixture.exists():
+        candidate = gemini_p / "test" / "job.evk"
+        if candidate.exists():
+            fixture = candidate
+
+    # Stage 5: Run EVK verify
+    s_evk_verify = StageResult("EVK: verify")
+    if not fixture.exists():
+        s_evk_verify.error = f"Fixture not found: {fixture}"
+    else:
+        evk_bin = evk_p / "target" / "release" / "evk"
+        if not evk_bin.exists():
+            # try cargo run
+            code, out, err = run_cmd(["cargo", "run", "--release", "--", "verify", str(fixture), "--cert"], cwd=evk_p)
+            s_evk_verify.output = out
+            s_evk_verify.error = err
+            s_evk_verify.pass_status = (code == 0)
+        else:
+            code, out, err = run_cmd([str(evk_bin), "verify", str(fixture), "--cert"], cwd=evk_p)
+            s_evk_verify.output = out
+            s_evk_verify.error = err
+            s_evk_verify.pass_status = (code == 0)
+    report["stages"].append(s_evk_verify.to_dict())
+
+    # Stage 6: Run Gemini-Box analyze on the same fixture (if it can analyze .evkp)
+    s_g_analyze = StageResult("GEMINI-BOX: analyze")
+    gemini_bin = gemini_p / "target" / "release" / "analyze"
+    if not gemini_p.exists():
+        s_g_analyze.error = f"Gemini path not found: {gemini_p}"
+    elif not fixture.exists():
+        s_g_analyze.error = f"Fixture not found: {fixture}"
+    else:
+        if gemini_bin.exists():
+            code, out, err = run_cmd([str(gemini_bin), str(fixture)], cwd=gemini_p)
+            s_g_analyze.output = out
+            s_g_analyze.error = err
+            s_g_analyze.pass_status = (code == 0)
+        else:
+            # try cargo run
+            code, out, err = run_cmd(["cargo", "run", "--release", "--bin", "analyze", str(fixture)], cwd=gemini_p)
+            s_g_analyze.output = out
+            s_g_analyze.error = err
+            s_g_analyze.pass_status = (code == 0)
+    report["stages"].append(s_g_analyze.to_dict())
+
+    # Stage 7: Run ACM verify on fixture (or on job.evk)
+    s_a_verify = StageResult("ACM: verify")
+    acm_bin = acm_p / "target" / "release" / "evk"
+    if not acm_p.exists():
+        s_a_verify.error = f"ACM path not found: {acm_p}"
+    elif not fixture.exists():
+        s_a_verify.error = f"Fixture not found: {fixture}"
+    else:
+        if acm_bin.exists():
+            code, out, err = run_cmd([str(acm_bin), "verify", str(fixture), "--json"], cwd=acm_p)
+            s_a_verify.output = out
+            s_a_verify.error = err
+            s_a_verify.pass_status = (code == 0)
+        else:
+            code, out, err = run_cmd(["cargo", "run", "--release", "--bin", "evk", "verify", str(fixture), "--json"], cwd=acm_p)
+            s_a_verify.output = out
+            s_a_verify.error = err
+            s_a_verify.pass_status = (code == 0)
+    report["stages"].append(s_a_verify.to_dict())
+
+    # Final summary
+    final = {"EVK": any(s['name'].startswith('EVK:') and s['pass'] for s in report['stages']),
+             "GEMINI-BOX": any(s['name'].startswith('GEMINI-BOX:') and s['pass'] for s in report['stages']),
+             "COMPLIANCE_MATRIX": any(s['name'].startswith('ACM:') and s['pass'] for s in report['stages'])}
+
+    # Print short status
+    print("Z-12 PLATFORM STATUS\n")
+    print(f"EVK: {'PASS' if final['EVK'] else 'FAIL'}")
+    print(f"GEMINI-BOX: {'PASS' if final['GEMINI-BOX'] else 'FAIL'}")
+    print(f"COMPLIANCE MATRIX: {'PASS' if final['COMPLIANCE_MATRIX'] else 'FAIL'}")
+
+    report["summary"] = final
+
+    # Save reports
+    write_json_report(report)
+    render_html(report)
+    render_evidence_html(report)
+
+    return report
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="z12", description="Z-12 integration demo CLI")
+    parser.add_argument("command", choices=["demo"], help="command to run")
+    parser.add_argument("--run-kill-vector-test", action="store_true", help="Run make test_killswitch in evk (optional)")
+    args = parser.parse_args(argv)
+
+    if args.command == "demo":
+        report = run_demo(run_kill_vector_test=args.run_kill_vector_test)
+        # exit code: 0 if all passes, 1 otherwise
+        if all(s['pass'] for s in report['stages'] if s['name'].endswith(': verify') or 'cargo build' in s['name']):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
