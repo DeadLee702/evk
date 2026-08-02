@@ -9,12 +9,14 @@ jobs:
   demo:
     name: Run Z-12 demo pipeline
     runs-on: ubuntu-latest
+    env:
+      # deterministic demo epoch (can be overridden)
+      SOURCE_DATE_EPOCH: 1700000000
 
     steps:
       - name: Checkout EVK (this repo)
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
           path: evk
 
       - name: Checkout Gemini-Box
@@ -41,27 +43,45 @@ jobs:
           profile: minimal
           override: true
 
-      - name: Verify Python & Rust
+      - name: Cache Cargo registry + index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache target (release)
+        uses: actions/cache@v4
+        with:
+          path: evk/target
+          key: ${{ runner.os }}-evk-target-${{ hashFiles('evk/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-evk-target-
+
+      - name: Verify tool availability
         run: |
           python3 --version
           cargo --version
+
+      - name: Build & Test (EVK)
+        working-directory: evk
+        run: |
+          cargo build --release --locked
+          cargo test --release --locked -- --nocapture
+
+      - name: Build (Gemini-Box)
+        working-directory: gemini-box
+        run: cargo build --release --locked
+
+      - name: Build (Adversarial Compliance Matrix)
+        working-directory: adversarial-compliance-matrix
+        run: cargo build --release --locked
 
       - name: Run deterministic demo pipeline (bash)
         working-directory: evk
         run: |
           chmod +x ./run_z12_pipeline.sh
-          ./run_z12_pipeline.sh
-
-      - name: Run z12 Python orchestrator (optional)
-        working-directory: evk
-        run: |
-          chmod +x ./z12
-          ./z12 demo || true
-
-      - name: Upload Z-12 reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: z12-reports
-          path: |
-            evk/z12_demo_report](#)
-
+          ./
