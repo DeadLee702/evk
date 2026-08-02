@@ -37,11 +37,9 @@ jobs:
           sudo apt-get install -y python3 python3-pip build-essential make unzip
 
       - name: Set up Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          profile: minimal
-          override: true
 
       - name: Cache Cargo registry + index
         uses: actions/cache@v4
@@ -69,19 +67,19 @@ jobs:
       - name: Build & Test (EVK)
         working-directory: evk
         run: |
-          cargo build --release --locked
-          cargo test --release --locked -- --nocapture
+          cargo build --release
+          cargo test --release -- --nocapture
 
       - name: Build (Gemini-Box)
         working-directory: gemini-box
-        run: cargo build --release --locked
+        run: cargo build --release
 
       - name: Build (Adversarial Compliance Matrix)
         working-directory: adversarial-compliance-matrix
-        run: cargo build --release --locked
+        run: cargo build --release
 
       - name: Run deterministic demo pipeline (bash)
         working-directory: evk
         run: |
           chmod +x ./run_z12_pipeline.sh
-          ./
+          ./run_z12_pipeline.sh
