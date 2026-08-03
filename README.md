@@ -176,3 +176,66 @@ Judges quick checklist:
   are claimed. **Ghost Matrix** is a containment *concept*, not yet an implemented service.
 
 MIT licensed (see `LICENSE`).
+
+---
+
+## Production Readiness
+
+Z-12 is containerized and release-ready with safe defaults. The Kill Vector runs in
+**STUB** mode by default in CI and demo containers — it logs enforcement decisions
+without calling `kill(2)`. Real enforcement (`ENFORCE`) is opt-in and requires a
+dedicated host with admin consent.
+
+### Containerized demo
+
+```bash
+cp .env.example .env          # KILL_MODE=STUB by default
+docker build -f Dockerfile.evk -t evk:local .
+docker run --rm -p 8000:8000 evk:local ./run_z12_pipeline.sh
+# or full multi-service demo:
+docker-compose up --build
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KILL_MODE` | `STUB` | `STUB` logs only; `ENFORCE` performs real `kill(2)` |
+| `Z12_KILL_LOG` | `/var/log/z12/kill.log` | Forensic enforcement log path |
+| `GEMINI_KEY_PATH` | `$HOME/.z12/keystore/gemini_ed25519` | ed25519 private key location |
+| `DOCKER_REGISTRY` | `ghcr.io` | Container registry for releases |
+| `DOCKER_NAMESPACE` | `your-org-or-user` | Registry namespace |
+
+### Key management
+
+```bash
+./scripts/generate_ed25519_keys.sh    # generates ed25519 keypair locally
+```
+
+Keys are never stored in the repository. For production, use HashiCorp Vault, a
+cloud KMS, or an HSM (PKCS#11). See `.env.example` for path configuration.
+
+### CI & releases
+
+- Tagged releases (`v1.0.0`) trigger the [release workflow](.github/workflows/release.yml)
+  which builds and publishes container images to GitHub Container Registry (GHCR).
+- CI runs `cargo fmt --check`, `cargo clippy -D warnings`, `cargo audit`, `cargo test`,
+  and the C Kill Vector test suite on every push and pull request.
+
+### Kubernetes deployment
+
+```bash
+kubectl apply -f deploy/evk-deployment.yaml
+```
+
+The manifest defaults to `KILL_MODE=STUB`. To enable enforcement, set the env var
+to `ENFORCE` and deploy on a dedicated, privileged node with RBAC controls.
+
+### Production checklist
+
+1. **Safety** — STUB mode everywhere by default; ENFORCE is opt-in on dedicated hosts.
+2. **Key management** — external keystore (Vault/HSM/KMS); never commit keys.
+3. **CI** — fmt, clippy, audit, unit + integration tests in containers.
+4. **Releases** — signed container images via GHCR on tagged releases.
+5. **Observability** — structured JSON logs + forensic audit trail.
+6. **Security review** — third-party audit required before production deployment.
