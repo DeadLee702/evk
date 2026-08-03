@@ -1,241 +1,125 @@
 # Z-12: Sovereign Runtime Security Platform
-
-> **Deterministic verification. Hardened execution. Continuous compliance. Runtime enforcement.**
-
+> Deterministic verification. Hardened execution. Continuous compliance. Runtime enforcement.
 ---
-
 ## Why Z-12 Exists
-
-Modern software systems increasingly rely on autonomous services, AI agents, automation pipelines, and distributed infrastructure to make decisions in real time. As these systems become more capable they also expand the attack surface, and traditional reactive security approaches are no longer sufficient.
-
-Traditional security solutions often focus on observing events after they occur or responding once an incident has already happened. Z-12 approaches the problem differently: instead of assuming execution is trustworthy, we verify and enforce trust before and during runtime.
-
-**Verify trust before execution. Continuously validate runtime behavior. Enforce policy when required.**
-
+Modern software systems increasingly rely on autonomous services, AI agents, automation pipelines, and distributed infrastructure to make decisions in real time. Z-12 verifies identity and integrity before execution, continuously validates runtime behavior, and enforces policy when required.
 ---
-
 ## Ecosystem
-
 | Repository | Purpose |
 |------------|---------|
-| **EVK** (this repo) | Deterministic identity and integrity verification **+ Kill Vector runtime enforcement** |
-| **[Gemini-Box](https://github.com/DeadLee702/gemini-box)** | Hardened execution environment (ed25519 signing) |
-| **[Adversarial Compliance Matrix](https://github.com/DeadLee702/adversarial-compliance-matrix)** | Continuous runtime validation |
+| **EVK** (this repo) | Deterministic identity and integrity verification + Kill Vector runtime enforcement |
+| **[Gemini-Box](https://github.com/DeadLee702/gemini-box)** | Hardened signing & non-repudiation (ed25519) |
+| **[Adversarial Compliance Matrix](https://github.com/DeadLee702/adversarial-compliance-matrix)** | Continuous runtime validation / verdict engine |
 | **Z-12 Dashboard** (`dashboard/`) | Unified operational visibility |
-
 Each layer performs one responsibility while contributing to the overall runtime security posture.
-
 ---
-
 ## What lives in this repository
-
 ```text
 evk/
 ├── src/lib.rs, src/bin/evk.rs   # EVK deterministic verify/pack (.evkp, SHA-256 manifests)  [Rust]
 ├── src/kill_vector/             # Kill Vector runtime enforcement engine                      [C]
 │   ├── killswitch.h             #   enforcement API
-│   └── killswitch.c             #   SIGKILL + forensic log, unsafe-PID guard
+│   └── killswitch.c             #   SIGKILL + forensic log, unsafe-PID guard (production)
+│   └── killswitch_stub.c        #   STUB used by CI / demos (non-destructive)
 ├── src/sensors/pike_reaper/     # Pike/Reaper -> ACM_DENY -> Kill Vector integration (scaffold) [C]
 ├── tests/                       # evkp_verify (Rust) + test_killswitch (C)
 ├── gauntlet/                    # 12 defensive Room.verify() detectors                        [Python]
-├── master_runner.py            # orchestrator: 12 rooms + EVK core -> health report
-├── judge/cop_v1.py             # COP judge: PURA / MALPURA verdict
-├── mha_run.sh                  # pipeline driver (exit 0=PURA, 1=MALPURA, 2=critical)
-├── dashboard/index.html        # React/Tailwind control plane (reads /api/health)
-├── z12                        # Python integration CLI (integration-only orchestrator)
-├── run_z12_pipeline.sh        # Deterministic demo driver (Bash)
-└── Makefile                    # builds the C Kill Vector subsystem
+├── master_runner.py             # orchestrator: 12 rooms + EVK core -> health report
+├── judge/cop_v1.py               # COP judge: PURA / MALPURA verdict
+├── run_z12_pipeline.sh          # Deterministic demo driver (Bash)
+├── Dockerfile.evk               # optional: container build for demo
+├── docker-compose.yml           # optional: containerized demo (EVK + Gemini + ACM)
+└── Makefile                     # builds C Kill Vector subsystem
 ```
-
+How it fits together
+- EVK verifies deterministic bundles (.evkp) and exposes CLI: `evk verify`.
+- The Kill Vector is the enforcement layer: when ACM denies a lineage, EVK/orchestrator calls the Kill Vector to enforce (SIGKILL). The repository provides a safe stub (killswitch_stub.c) used by CI and demos so no host processes are terminated during tests.
+- The Python gauntlet + judge + master_runner orchestrate the demo pipeline.
 ---
-
 ## Quick start
-
+### Prerequisites
+- Rust toolchain (rustup)
+- C toolchain (build-essential / clang)
+- Python 3.x (pip) for demo scripts
+- Docker (optional, for containerized demo)
 ### EVK core (Rust)
 ```bash
 cargo build --release --locked
-cargo test  --release --locked -- --nocapture
+cargo test --release --locked
 ./target/release/evk verify --bundle fixtures/sample.evkp --cert
 ```
-
 ### Kill Vector (C)
+- Safe CI/demo (recommended): uses the killswitch stub which logs but does not call kill(2)
 ```bash
-make test_killswitch     # builds + runs the enforcement test -> "Kill Vector Test: PASS"
-make reaper              # builds the Pike/Reaper integration scaffold
+make test_killswitch_ci   # build + run the C test linked against the stub (safe)
 ```
-
-The Kill Vector terminates a policy-denied process (`kill(pid, SIGKILL)`), refuses
-unsafe PIDs (`pid <= 1`), and appends a forensic record to `/var/log/z12/kill.log`
-(override with `Z12_KILL_LOG`) in the form:
-
-```text
-[1720000000] PID=4521 REASON=POLUITA_LINEAGE ACTION=SIGKILL
-```
-
-### Health pipeline + dashboard
+- Destructive local test (only run on isolated test hosts):
 ```bash
-pip install -r requirements.txt
-./mha_run.sh                                  # build -> gauntlet -> judge -> verdict
-python master_runner.py --serve               # live dashboard at http://127.0.0.1:8000
+make test_killswitch      # builds + runs the enforcement test -> performs real SIGKILL
 ```
-
+### Health pipeline + dashboard (demo)
+```bash
+python3 -m pip install --user -r requirements.txt
+./run_z12_pipeline.sh       # deterministic demo driver (safe in CI/demo mode)
+python master_runner.py --serve  # live dashboard at http://127.0.0.1:8000
+```
 ---
-
-## Z-12 Integration & Demo (z12)
-
-We provide a lightweight orchestration layer and deterministic demo runner that builds and exercises the full Z-12 platform (EVK, Gemini-Box, Adversarial Compliance Matrix) and produces machine- and human-readable reports.
-
-Files added for integration:
-- `z12` — Python orchestration CLI (integration-only). Usage: `./z12 demo` (requires python3).
-- `run_z12_pipeline.sh` — Deterministic Bash demo driver. Usage: `./run_z12_pipeline.sh`.
-
+## Environment / safe defaults (.env / demo)
+Create .env (or export env vars) to override defaults. Example (.env.example provided):
+- Z12_KILL_LOG — path to kill log (default: /var/log/z12/kill.log)
+- KILL_MODE — STUB (default) or ENFORCE (explicitly enable destructive enforcement)
+- Z12_GEMINI_PATH, Z12_ACM_PATH — repository paths for sibling demo
+Safety defaults:
+- KILL_MODE defaults to STUB: the killswitch stub logs enforcement actions but never calls kill(2).
+- CI runs `make test_killswitch_ci` and uses the stub.
+- To enable actual enforcement you must explicitly set KILL_MODE=ENFORCE on a dedicated, auditable host.
+---
+## Containerized demo (optional)
+We provide Dockerfile.evk and a docker-compose.yml that run EVK + Gemini-Box + ACM together. By default these run in safe STUB mode. To build and run:
+```bash
+# build locally
+docker build -f Dockerfile.evk -t evk:local .
+# run safe demo
+docker run --rm -e KILL_MODE=STUB -e Z12_KILL_LOG=/tmp/z12_kill.log -v $(pwd)/tmp:/tmp -p 8000:8000 evk:local ./run_z12_pipeline.sh
+# or with docker-compose:
+cp .env.example .env
+docker-compose up --build
+```
+---
+## Dashboard API Endpoints
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/health` | Full health report (12-room gauntlet + EVK core status) |
+| `GET /api/swarm` | Swarm report (per-room status, attack vectors, zodiac mapping) |
+| `GET /api/version` | Platform component versions |
+| `GET /api/reports` | Forensic reports (non-PURA incidents with enforcement actions) |
+---
+## Integration & demo (z12)
 Quick demo (sibling repo layout)
 1. Ensure the three repositories are siblings:
    - `../evk`
    - `../gemini-box`
    - `../adversarial-compliance-matrix`
 2. Make scripts executable:
-   - `chmod +x ./z12 ./run_z12_pipeline.sh`
-3. Run a deterministic demo against the fixture `test/incident_7f3a.evkp`:
-   - `./run_z12_pipeline.sh`
-   - or `./z12 demo`
+   - `chmod +x ./run_z12_pipeline.sh ./z12`
+3. Run:
+   - `./run_z12_pipeline.sh` or `./z12 demo`
 4. Outputs:
-   - `z12_demo_report.json` / `z12_demo_report.html` / `z12_demo_evidence.html` (printable)
-
-Environment overrides (if repos are not siblings):
-- `Z12_EVK_PATH` — path to EVK
-- `Z12_GEMINI_PATH` — path to Gemini-Box
-- `Z12_ACM_PATH` — path to Adversarial Compliance Matrix
-- `FIXTURE_PATH` — override fixture location
-
-Safety: the Kill Vector runtime enforces SIGKILL for denied processes. Running the enforcement test (`make test_killswitch`) requires a C toolchain and should be executed only on isolated test hosts (`./run_z12_pipeline.sh --run-kill-vector-test`).
-
+   - `z12_demo_report.json`, `z12_demo_report.html`, `z12_demo_evidence.html`
+Environment overrides:
+- Z12_EVK_PATH, Z12_GEMINI_PATH, Z12_ACM_PATH, FIXTURE_PATH
 ---
-
-## Dashboard API Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/health` | Full health report (12-room gauntlet + EVK core status) |
-| `GET /api/swarm` | Swarm report (per-room status, attack vectors, zodiac mapping) |
-| `GET /api/version` | Platform version + component versions |
-| `GET /api/reports` | Forensic reports (non-PURA incidents with enforcement actions) |
-
+## Release & CI
+- CI: .github/workflows/ci.yml runs cargo test, compiles the C tests against the safe stub, and runs the demo script in safe mode.
+- Release: docker images can be built by tagging (vX.Y.Z) and using the provided release workflow which pushes signed container images to GHCR.
 ---
-
-## Enforcement flow
-
-```text
-Pike sensor ─▶ runtime event ─▶ ACM decision ─▶ ACM_DENY ─▶ Kill Vector ─▶ SIGKILL + forensic log
-```
-
-`handle_acm_decision()` in `src/sensors/pike_reaper/reaper/src/main.c` is the
-concrete integration point (tested via `make test_killswitch`).
-
+## Safety & productization notes
+- The enforcement engine can kill processes. Production deployments MUST:
+  - Run enforcement only on dedicated hosts with admin controls and auditing.
+  - Use a secure keystore (do not keep private keys in repo).
+  - Require explicit admin opt-in to enable ENFORCE mode.
+- Add observability (structured logs, metrics) and a documented incident response playbook before using ENFORCE in production.
 ---
-
-## Hackathon demo (judge-friendly)
-
-Problem: autonomous systems lack deterministic runtime integrity and enforcement.
-
-Solution: Z-12 unifies deterministic verification (EVK), hardened signing/triage (Gemini-Box), and a compliance verdict engine (ACM) with deterministic, auditable evidence and enforcement.
-
-How to demo (60–90 seconds):
-- Run `./run_z12_pipeline.sh` (or `./z12 demo`).
-- Open `z12_demo_report.html` and `z12_demo_evidence.html` in a browser — these are demo‑ready artefacts you can hand to judges.
-- Point judges to the `summary` block in the JSON report (`z12_demo_report.json`) for machine-verifiable proof.
-
-Judges quick checklist:
-- [ ] Clone the three repositories as siblings (evk, gemini-box, adversarial-compliance-matrix)
-- [ ] Ensure Rust toolchain and Python3 are installed
-- [ ] `chmod +x ./run_z12_pipeline.sh` then `./run_z12_pipeline.sh`
-- [ ] Open `z12_demo_report.html` and `z12_demo_evidence.html` to inspect results
-
----
-
-## Core principles
-1. **Deterministic verification** — verify identity/integrity before execution.
-2. **Layered security** — each component owns one responsibility.
-3. **Runtime enforcement** — detection *plus* enforcement provides control.
-4. **Observable operations** — the platform always reports its current state.
-5. **Modular architecture** — components evolve independently.
-
-## Health states
-| State | Meaning |
-|---|---|
-| **PURA** | Healthy |
-| **VIGLA** | Warning |
-| **POLUITA** | Compromised |
-
----
-
 ## Honesty notes
-- The Kill Vector engine and its test are **real and working**. The Pike/Reaper
-  sensor and the ACM transport are **scaffolds** — no live event source is wired.
-- Gauntlet rooms are rule-based **demonstrations**; no detection-accuracy benchmarks
-  are claimed. **Ghost Matrix** is a containment *concept*, not yet an implemented service.
-
-MIT licensed (see `LICENSE`).
-
----
-
-## Production Readiness
-
-Z-12 is containerized and release-ready with safe defaults. The Kill Vector runs in
-**STUB** mode by default in CI and demo containers — it logs enforcement decisions
-without calling `kill(2)`. Real enforcement (`ENFORCE`) is opt-in and requires a
-dedicated host with admin consent.
-
-### Containerized demo
-
-```bash
-cp .env.example .env          # KILL_MODE=STUB by default
-docker build -f Dockerfile.evk -t evk:local .
-docker run --rm -p 8000:8000 evk:local ./run_z12_pipeline.sh
-# or full multi-service demo:
-docker-compose up --build
-```
-
-### Environment variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `KILL_MODE` | `STUB` | `STUB` logs only; `ENFORCE` performs real `kill(2)` |
-| `Z12_KILL_LOG` | `/var/log/z12/kill.log` | Forensic enforcement log path |
-| `GEMINI_KEY_PATH` | `$HOME/.z12/keystore/gemini_ed25519` | ed25519 private key location |
-| `DOCKER_REGISTRY` | `ghcr.io` | Container registry for releases |
-| `DOCKER_NAMESPACE` | `your-org-or-user` | Registry namespace |
-
-### Key management
-
-```bash
-./scripts/generate_ed25519_keys.sh    # generates ed25519 keypair locally
-```
-
-Keys are never stored in the repository. For production, use HashiCorp Vault, a
-cloud KMS, or an HSM (PKCS#11). See `.env.example` for path configuration.
-
-### CI & releases
-
-- Tagged releases (`v1.0.0`) trigger the [release workflow](.github/workflows/release.yml)
-  which builds and publishes container images to GitHub Container Registry (GHCR).
-- CI runs `cargo fmt --check`, `cargo clippy -D warnings`, `cargo audit`, `cargo test`,
-  and the C Kill Vector test suite on every push and pull request.
-
-### Kubernetes deployment
-
-```bash
-kubectl apply -f deploy/evk-deployment.yaml
-```
-
-The manifest defaults to `KILL_MODE=STUB`. To enable enforcement, set the env var
-to `ENFORCE` and deploy on a dedicated, privileged node with RBAC controls.
-
-### Production checklist
-
-1. **Safety** — STUB mode everywhere by default; ENFORCE is opt-in on dedicated hosts.
-2. **Key management** — external keystore (Vault/HSM/KMS); never commit keys.
-3. **CI** — fmt, clippy, audit, unit + integration tests in containers.
-4. **Releases** — signed container images via GHCR on tagged releases.
-5. **Observability** — structured JSON logs + forensic audit trail.
-6. **Security review** — third-party audit required before production deployment.
+- Kill Vector enforcement engine and its test are real. Sensors and ACM transport are scaffolds and require integration work to connect live event sources. Gauntlet rooms are demonstrations, not tuned detection engines.
+MIT Licensed (see LICENSE).
