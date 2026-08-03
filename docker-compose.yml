@@ -1,0 +1,28 @@
+version: "3.9"
+services:
+  evk:
+    build:
+      context: .
+      dockerfile: Dockerfile.evk
+    environment:
+      - KILL_MODE=${KILL_MODE:-STUB}
+      - Z12_KILL_LOG=/tmp/z12_kill.log
+      - Z12_GEMINI_PATH=/opt/gemini
+      - Z12_ACM_PATH=/opt/acm
+    volumes:
+      - ./tmp:/tmp
+    ports:
+      - "8000:8000"
+    depends_on:
+      - gemini
+      - acm
+  gemini:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/gemini-box:latest
+    environment:
+      - GEMINI_KEY_PATH=/opt/keystore/gemini_ed25519
+    volumes:
+      - ./keystore:/opt/keystore
+  acm:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/adversarial-compliance-matrix:latest
+    ports:
+      - "9000:9000"

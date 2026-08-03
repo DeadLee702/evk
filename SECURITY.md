@@ -30,3 +30,11 @@ bundles, so it detects tampering with a known-good manifest but does not by itse
 prove *who* produced a bundle. Cryptographic signing is tracked on the roadmap.
 
 No secrets or credentials are stored in this repository.
+
+## Vulnerability Disclosure
+
+Security contact: security@yourdomain.com
+Please use PGP to encrypt sensitive details (PGP key ID: <insert>).
+We request:
+- Proof-of-concept only; do not publish exploit details until we have fixed the issue.
+- Contact us privately and allow 90 days for remediation before public disclosure.

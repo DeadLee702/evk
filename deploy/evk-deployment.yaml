@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evk
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: evk
+  template:
+    metadata:
+      labels:
+        app: evk
+    spec:
+      containers:
+        - name: evk
+          image: ghcr.io/your-org/evk:latest
+          env:
+            - name: KILL_MODE
+              value: "STUB"
+            - name: Z12_KILL_LOG
+              value: "/var/log/z12/kill.log"
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: z12-logs
+              mountPath: /var/log/z12
+      volumes:
+        - name: z12-logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evk
+spec:
+  selector:
+    app: evk
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP

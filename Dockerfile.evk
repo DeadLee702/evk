@@ -1,0 +1,31 @@
+# Multi-stage build for EVK (Rust) with killswitch stub by default
+FROM rust:1.72 as builder
+WORKDIR /usr/src/evk
+# Copy Cargo files first for Docker cache efficiency
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY Makefile ./
+COPY tests ./tests
+COPY run_z12_pipeline.sh ./
+COPY z12 ./
+# Build release
+RUN cargo build --release
+# Final image
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates libssl-dev && rm -rf /var/lib/apt/lists/*
+# Create runtime user
+RUN useradd -m -d /home/z12 z12
+WORKDIR /home/z12
+# Copy binary
+COPY --from=builder /usr/src/evk/target/release/evk ./evk
+COPY --from=builder /usr/src/evk/run_z12_pipeline.sh ./run_z12_pipeline.sh
+COPY --from=builder /usr/src/evk/src/kill_vector/killswitch_stub.c ./killswitch_stub.c
+# Add entrypoint that selects stub vs real behavior
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh ./evk ./run_z12_pipeline.sh
+ENV KILL_MODE=STUB
+ENV Z12_KILL_LOG=/tmp/z12_kill.log
+USER z12
+EXPOSE 8000
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["./evk", "verify"]
