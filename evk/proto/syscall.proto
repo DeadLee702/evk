@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package syscall;
+
+// SyscallEvent is the canonical event produced by eBPF Pike/Reaper BPF program.
+// Keep the fields minimal and stable.
+message SyscallEvent {
+  uint64 ts_ns = 1;         // event timestamp (nanoseconds since epoch)
+  uint32 pid = 2;           // process id
+  uint32 tid = 3;           // thread id
+  string comm = 4;          // process name (comm)
+  string syscall = 5;       // syscall name, e.g., "execve"
+  repeated string args = 6; // arguments (if available)
+  int64 retval = 7;         // return value (if available)
+}
