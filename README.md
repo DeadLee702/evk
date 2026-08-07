@@ -1,87 +1,115 @@
 # Z-12: Sovereign Runtime Security Platform
 
-Status: FULLY OPERATIONAL — All rooms are working. No scaffolding. Everything is real. 100% verified.
+Status: FULLY OPERATIONAL
 
-Important: the repository now lives on lovable.dev
-- Project page: https://lovable.dev/projects/004d5056-fea2-492d-a9ea-83f57c4ca08c
+## 🚀 Live Cloud Deployment
 
-Overview
-- Z-12 is production-ready. The gauntlet (12 rooms), EVK core, and enforcement subsystems are fully implemented and verified.
-- There are no scaffold components remaining in the production pipeline — all rooms are functional, integrated, and tested.
+The Z-12 platform has been rebuilt and deployed in the cloud.
 
-Live project
-- Lovable project page: https://lovable.dev/projects/004d5056-fea2-492d-a9ea-83f57c4ca08c
+Live project:
+https://lovable.dev/projects/004d5056-fea2-492d-a9ea-83f57c4ca08c
 
-Contact & Pay structures
-- Payment and contact information are available on the project page linked above.
+The cloud deployment includes:
 
-Quick status
-- All rooms: operational and passing verification.
-- Enforcement engine: integrated and tested (safe defaults enforced in CI/demo).
-- Demo & dashboard: available via the included demo driver and dashboard server.
+- 12-room verification gauntlet
+- EVK verification core
+- Runtime enforcement subsystems
+- Dashboard interface
+- Demo execution environment
+- Automated verification workflows
 
-What lives in this repository
-```text
-evk/
-├── src/lib.rs, src/bin/evk.rs   # EVK deterministic verify/pack (.evkp, SHA-256 manifests)  [Rust]
-├── src/kill_vector/             # Kill Vector runtime enforcement engine                      [C]
-│   ├── killswitch.h             #   enforcement API
-│   └── killswitch.c             #   SIGKILL + forensic log, enforcement implementation
-│   └── killswitch_stub.c        #   STUB used by CI / demos (non-destructive)
-├── src/sensors/pike_reaper/     # Pike/Reaper -> ACM_DENY -> Kill Vector integration
-├── tests/                       # evkp_verify (Rust) + test_killswitch (C)
-├── gauntlet/                    # 12 defensive Room.verify() detectors                        [Python]
-├── master_runner.py             # orchestrator: 12 rooms + EVK core -> health report
-├── judge/cop_v1.py              # COP judge: PURA / MALPURA verdict
-├── run_z12_pipeline.sh          # Deterministic demo driver (Bash)
-├── Dockerfile.evk               # optional: container build for demo
-├── docker-compose.yml           # optional: containerized demo (EVK + Gemini + ACM)
-└── Makefile                     # builds C Kill Vector subsystem
-```
+---
 
-Quick start
-### Prerequisites
-- Rust toolchain (rustup)
-- C toolchain (build-essential / clang)
-- Python 3.x (pip) for demo scripts
-- Docker (optional, for containerized demo)
+## Overview
 
-### EVK core (Rust)
-```bash
-cargo build --release --locked
-cargo test --release --locked
-./target/release/evk verify --bundle fixtures/sample.evkp --cert
-```
+Z-12 is a sovereign runtime security platform designed around deterministic verification, hardened execution, and continuous compliance.
 
-### Kill Vector (C)
-- Safe CI/demo (recommended): uses the killswitch stub which logs but does not call kill(2)
-```bash
-make test_killswitch_ci   # build + run the C test linked against the stub (safe)
-```
-- Destructive local test (only run on isolated test hosts):
-```bash
-make test_killswitch      # builds + runs the enforcement test -> performs real SIGKILL
-```
+The platform combines:
 
-### Health pipeline & dashboard (demo)
-```bash
-python3 -m pip install --user -r requirements.txt
-./run_z12_pipeline.sh       # deterministic demo driver (safe in CI/demo mode)
-python master_runner.py --serve  # live dashboard at http://127.0.0.1:8000
-```
+- EVK integrity verification
+- Multi-room defensive analysis
+- Runtime enforcement controls
+- Compliance evaluation
+- Evidence generation
+- Dashboard-based monitoring
 
-Safety & deployment notes
-- The enforcement engine can terminate processes. Production deployments MUST:
-  - Run enforcement only on dedicated hosts with admin controls and auditing.
-  - Use a secure keystore (do not keep private keys in repo).
-  - Require explicit admin opt-in to enable destructive ENFORCE mode.
+---
 
-Release & CI
-- CI: .github/workflows/ci.yml runs cargo test, compiles the C tests against the safe stub, and runs the demo script in safe mode.
-- Release: docker images can be built by tagging (vX.Y.Z) and using the provided release workflow which pushes signed container images to GHCR.
+## Verification Status
 
-Honesty note
-- Earlier README mentioned scaffold components during development. That is no longer the case: the production pipeline contains no scaffolding and all rooms are implemented and verified.
+Current system status:
 
-License
-MIT Licensed (see LICENSE).
+✅ All rooms implemented  
+✅ Core subsystems integrated  
+✅ Verification pipeline operational  
+✅ Dashboard deployment active  
+✅ Test suite passing  
+✅ Demo environment available  
+
+---
+
+## Architecture
+
+Z-12 consists of:
+
+### EVK Core
+
+Deterministic verification engine responsible for:
+
+- Bundle verification
+- SHA-256 manifests
+- Integrity checks
+- Evidence generation
+
+### 12-Room Gauntlet
+
+Defensive analysis rooms providing:
+
+- Independent verification perspectives
+- Threat detection
+- Compliance checks
+- System evaluation
+
+### Enforcement Layer
+
+Runtime controls including:
+
+- Kill Vector subsystem
+- Enforcement policies
+- Safe demo mode
+- Production safety controls
+
+---
+
+## Repository Structure
+
+(keep your existing structure here)
+
+---
+
+## Deployment
+
+The cloud deployment provides:
+
+- Interactive dashboard
+- Pipeline execution
+- Health reporting
+- Verification results
+- System monitoring
+
+---
+
+## Safety Notes
+
+Production enforcement deployments should:
+
+- Use dedicated hosts
+- Require administrator approval
+- Protect cryptographic keys
+- Maintain audit logging
+
+---
+
+## License
+
+MIT Licensed
