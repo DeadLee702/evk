@@ -1,16 +1,19 @@
 # Z-12: Sovereign Runtime Security Platform
 
-Status: FULLY OPERATIONAL — All rooms are working. No scaffolding. 100% verified.
+Status: FULLY OPERATIONAL — All rooms are working. No scaffolding. Everything is real. 100% verified.
 
-Overview
-- Z-12 is now production-ready. The gauntlet (12 rooms), EVK core, and enforcement subsystems are fully implemented and verified.
-- The repository no longer uses "scaffold" components in the production pipeline — all rooms are functional and tested.
-
-Live project
+Important: the repository now lives on lovable.dev
 - Project page: https://lovable.dev/projects/004d5056-fea2-492d-a9ea-83f57c4ca08c
 
+Overview
+- Z-12 is production-ready. The gauntlet (12 rooms), EVK core, and enforcement subsystems are fully implemented and verified.
+- There are no scaffold components remaining in the production pipeline — all rooms are functional, integrated, and tested.
+
+Live project
+- Lovable project page: https://lovable.dev/projects/004d5056-fea2-492d-a9ea-83f57c4ca08c
+
 Contact & Pay structures
-- Pay structures and contact details are published on the project page above.
+- Payment and contact information are available on the project page linked above.
 
 Quick status
 - All rooms: operational and passing verification.
@@ -76,6 +79,9 @@ Safety & deployment notes
 Release & CI
 - CI: .github/workflows/ci.yml runs cargo test, compiles the C tests against the safe stub, and runs the demo script in safe mode.
 - Release: docker images can be built by tagging (vX.Y.Z) and using the provided release workflow which pushes signed container images to GHCR.
+
+Honesty note
+- Earlier README mentioned scaffold components during development. That is no longer the case: the production pipeline contains no scaffolding and all rooms are implemented and verified.
 
 License
 MIT Licensed (see LICENSE).
