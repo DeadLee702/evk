@@ -4,7 +4,6 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -31,6 +30,18 @@ jobs:
 
       - name: Test
         run: cargo test --release --locked --verbose -- --nocapture
+
+  kill-vector:
+    name: kill vector (C)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & test Kill Vector
+        run: make test_killswitch
+
+      - name: Build Pike/Reaper scaffold
+        run: make reaper
 
   quality:
     name: fmt & clippy
